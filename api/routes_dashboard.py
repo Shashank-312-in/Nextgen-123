@@ -400,6 +400,18 @@ def _gateway_visible(row) -> dict:
     }
 
 
+def _encrypt_gateway_secret(value: str | None) -> str | None:
+    """Encrypt a gateway secret and turn missing key config into a safe API error."""
+    try:
+        return encrypt_secret(value)
+    except RuntimeError as exc:
+        raise ApiError(
+            "SMS credential encryption is not configured on the backend. Set SMS_CREDENTIAL_KEY and restart the API.",
+            503,
+            "SMS_CREDENTIAL_KEY_MISSING",
+        ) from exc
+
+
 def _validate_gateway_body(body: SmsGatewayBody) -> None:
     mode = body.gateway_mode.strip().lower()
     if mode not in ("cloud", "local", "modem"):
@@ -454,7 +466,7 @@ async def create_sms_gateway(body: SmsGatewayBody, user: CurrentUser = Depends(g
                 ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             """, (
                 hod_username, user.username, body.gateway_name.strip() or "SMSGate Phone", body.gateway_mode.strip().lower(),
-                encrypt_secret(body.device_id), body.local_url, body.username, encrypt_secret(body.password),
+                _encrypt_gateway_secret(body.device_id), body.local_url, body.username, _encrypt_gateway_secret(body.password),
                 body.modem_port, body.modem_baud, body.sim_number, 0, int(body.active),
             ))
             from database import audit
@@ -479,7 +491,7 @@ async def create_sms_gateway(body: SmsGatewayBody, user: CurrentUser = Depends(g
             ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         """, (
             hod_username, hod_username, body.gateway_name.strip() or "SMSGate Phone", body.gateway_mode.strip().lower(),
-            encrypt_secret(body.device_id), body.local_url, body.username, encrypt_secret(body.password),
+            _encrypt_gateway_secret(body.device_id), body.local_url, body.username, _encrypt_gateway_secret(body.password),
             body.modem_port, body.modem_baud, body.sim_number, 0, int(body.active),
         ))
         from database import audit
@@ -537,10 +549,10 @@ async def update_sms_gateway(gateway_id: int, body: SmsGatewayBody, user: Curren
             WHERE id=%s
         """, (
             body.gateway_name.strip() or row["gateway_name"], mode,
-            encrypt_secret(body.device_id if body.device_id is not None and body.device_id.strip() else row.get("device_id")),
+            _encrypt_gateway_secret(body.device_id if body.device_id is not None and body.device_id.strip() else row.get("device_id")),
             body.local_url if body.local_url is not None else row.get("local_url"),
             body.username if body.username is not None else row.get("username"),
-            encrypt_secret(body.password if body.password else row.get("password")),
+            _encrypt_gateway_secret(body.password if body.password else row.get("password")),
             body.modem_port if body.modem_port is not None else row.get("modem_port"),
             body.modem_baud or row.get("modem_baud") or "115200",
             body.sim_number if body.sim_number is not None else row.get("sim_number"),
@@ -618,6 +630,14 @@ async def test_sms_gateway_connection(gateway_id: int, user: CurrentUser = Depen
         raise RuntimeError("Unsupported gateway mode")
     except ApiError:
         raise
+    except RuntimeError as exc:
+        if "SMS_CREDENTIAL_KEY" in str(exc):
+            raise ApiError(
+                "SMS credential encryption is not configured on the backend. Set SMS_CREDENTIAL_KEY and restart the API.",
+                503,
+                "SMS_CREDENTIAL_KEY_MISSING",
+            ) from exc
+        raise ApiError("Gateway connection test failed", 400, "GATEWAY_TEST_FAILED") from exc
     except Exception as exc:
         raise ApiError("Gateway connection test failed", 400, "GATEWAY_TEST_FAILED") from exc
 

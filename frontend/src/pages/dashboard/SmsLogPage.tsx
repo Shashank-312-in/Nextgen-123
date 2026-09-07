@@ -110,6 +110,8 @@ export function SmsLogPage({ user, onLoggedOut }: Props) {
   const [hodSmsAccess, setHodSmsAccess] = useState<FacultySmsAccessData | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
+  const [testingGatewayId, setTestingGatewayId] = useState<number | null>(null);
+  const [gatewayConnectionStatus, setGatewayConnectionStatus] = useState<Record<number, "connected" | "not_connected">>({});
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -226,14 +228,27 @@ export function SmsLogPage({ user, onLoggedOut }: Props) {
     } finally { setBusy(null); }
   };
 
-  const testConnection = async () => {
-    if (!currentGateway) return;
-    setBusy("connection"); setError(null);
+  const testConnection = async (gatewayId = currentGateway?.id) => {
+    if (!gatewayId) return;
+    setBusy("connection");
+    setTestingGatewayId(gatewayId);
+    setError(null);
+    setGatewayConnectionStatus((old) => {
+      const next = { ...old };
+      delete next[gatewayId];
+      return next;
+    });
     try {
-      const result = await testSmsGatewayConnection(currentGateway.id);
+      const result = await testSmsGatewayConnection(gatewayId);
+      setGatewayConnectionStatus((old) => ({ ...old, [gatewayId]: result.ok ? "connected" : "not_connected" }));
       setSuccess(result.mode === "cloud" ? "Cloud credentials and device ID are valid." : "Gateway connection check passed.");
-    } catch (err) { setError(err instanceof ApiClientError ? err.message : "Gateway connection test failed"); }
-    finally { setBusy(null); }
+    } catch (err) {
+      setGatewayConnectionStatus((old) => ({ ...old, [gatewayId]: "not_connected" }));
+      setError(err instanceof ApiClientError ? err.message : "Gateway connection test failed");
+    } finally {
+      setBusy(null);
+      setTestingGatewayId(null);
+    }
   };
 
   const sendTest = async () => {
@@ -322,9 +337,26 @@ export function SmsLogPage({ user, onLoggedOut }: Props) {
                         <div style={{ color: "var(--muted)", fontSize: 11, fontWeight: 800, textTransform: "uppercase" }}>Assigned batch</div>
                         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 5 }}>{delegated.length ? delegated.map(b => <span key={b.id} style={batchPillStyle}>{b.code || b.name} · {b.student_count ?? "—"}</span>) : <span style={{ ...batchPillStyle, color: "#dc2626" }}>No batch</span>}</div>
                       </div>
-                      <div style={{ minWidth: 170, textAlign: "right" }}>
-                        <span style={pill(ready ? "good" : "bad")}>{ready ? "GATEWAY READY" : g ? "GATEWAY NOT READY" : "NOT CONFIGURED"}</span>
+                      <div style={{ minWidth: 250, textAlign: "right" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
+                          <span style={pill(ready ? "good" : "bad")}>{ready ? "GATEWAY READY" : g ? "GATEWAY NOT READY" : "NOT CONFIGURED"}</span>
+                          {g && (
+                            <span style={pill(gatewayConnectionStatus[g.id] === "connected" ? "good" : gatewayConnectionStatus[g.id] === "not_connected" ? "bad" : "muted")}>
+                              {gatewayConnectionStatus[g.id] === "connected" ? "CONNECTED" : gatewayConnectionStatus[g.id] === "not_connected" ? "NOT CONNECTED" : "NOT TESTED"}
+                            </span>
+                          )}
+                        </div>
                         <div style={{ ...muted, marginTop: 5 }}>{g?.gateway_name || "Faculty must configure gateway"}</div>
+                        {g && (
+                          <button
+                            className="btn btn-outline"
+                            style={{ marginTop: 8 }}
+                            onClick={() => void testConnection(g.id)}
+                            disabled={busy !== null || !ready}
+                          >
+                            {testingGatewayId === g.id ? "Testing…" : "Test connection"}
+                          </button>
+                        )}
                       </div>
                     </div>
                   );

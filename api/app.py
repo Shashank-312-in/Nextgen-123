@@ -65,6 +65,14 @@ def _cors_config() -> tuple[list[str], str | None]:
         "http://127.0.0.1:5173",
         "http://localhost:3000",
     ])
+    # The deployed frontend is hosted separately from the API. Keep its
+    # origin exact (never a wildcard) so browser requests to a Cloudflare
+    # tunnel receive the CORS headers required by the frontend. Deployments
+    # can override this with FRONTEND_ORIGIN(S) when the frontend URL changes.
+    allowed_origins.extend(_split_env(os.environ.get("NEXTGEN_FRONTEND_ORIGIN")))
+    # Current production frontend used by this project. Keep this exact and
+    # allow deployment-specific overrides through FRONTEND_ORIGIN(S).
+    allowed_origins.append("https://nextgen-123.vercel.app")
     origin_regex = os.environ.get(
         "ALLOWED_ORIGIN_REGEX",
         r"http://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?",
