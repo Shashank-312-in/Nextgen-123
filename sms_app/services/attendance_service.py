@@ -191,7 +191,10 @@ def subject_faculty_map():
             "subject_name": r["subject_name"], "has_lab": r["has_lab"], "faculty": [],
         })
         if r["faculty_username"]:
-            subj["faculty"].append(r["faculty_full_name"] or r["faculty_username"])
+            subj["faculty"].append({
+                "faculty_username": r["faculty_username"],
+                "full_name": r["faculty_full_name"] or r["faculty_username"],
+            })
 
     return [
         {**sem, "subjects": list(sem["subjects"].values())}

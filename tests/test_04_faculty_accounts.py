@@ -43,6 +43,20 @@ class TestFacultyPageRBAC:
         assert "permissions" in data
 
 
+class TestFacultyPageShape:
+    def test_by_subject_is_flat_mapping(self, client, hod_headers):
+        r = client.get("/api/faculty", headers=hod_headers)
+        assert r.status_code == 200
+        data = r.json()["data"]
+        assert isinstance(data.get("by_subject"), dict)
+        for subject_code, faculty in data["by_subject"].items():
+            assert isinstance(subject_code, str)
+            assert isinstance(faculty, list)
+            for row in faculty:
+                assert "faculty_username" in row
+                assert "full_name" in row
+
+
 class TestPermissionsRBAC:
     def test_get_permissions_requires_hod(self, client, faculty_headers):
         r = client.get("/api/faculty/permissions", headers=faculty_headers)

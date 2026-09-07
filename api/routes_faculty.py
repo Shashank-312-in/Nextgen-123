@@ -44,7 +44,13 @@ def _can_manage_target(user: CurrentUser, row) -> bool:
 async def faculty_page(user: CurrentUser = Depends(get_current_user)):
     _require_hod_or_admin(user)
     hours = faculty_teaching_hours()
-    by_subject = subject_faculty_map()
+    subject_map = subject_faculty_map()
+    # The service groups subjects by semester, while the frontend contract
+    # expects a flat subject-code -> faculty-list mapping. Normalize it here.
+    by_subject = {}
+    for semester in subject_map:
+        for subject in semester.get("subjects", []):
+            by_subject[subject["subject_code"]] = list(subject.get("faculty", []))
     with connect() as c:
         if user.role == "ADMIN":
             accounts = c.execute(
@@ -58,7 +64,10 @@ async def faculty_page(user: CurrentUser = Depends(get_current_user)):
             scoped_usernames = {a["username"].lower() for a in accounts}
             hours = [h for h in hours if (dict(h).get("faculty_username") or "").lower() in scoped_usernames]
             by_subject = {
-                code: [f for f in faculty if (f.get("faculty_username") or "").lower() in scoped_usernames]
+                code: [
+                    f for f in faculty
+                    if (f.get("faculty_username") or "").lower() in scoped_usernames
+                ]
                 for code, faculty in by_subject.items()
             }
     visible_permissions = get_all_role_permissions() if user.role == "ADMIN" else [p for p in get_all_role_permissions() if p.get("role") == "FACULTY"]
