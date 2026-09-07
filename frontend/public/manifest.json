@@ -1,0 +1,17 @@
+{
+  "short_name": "CSD SMS",
+  "name": "VCET CSD Data Science Student Management System",
+  "icons": [
+    {
+      "src": "/sms_logo.jpeg",
+      "type": "image/jpeg",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#060c1e",
+  "theme_color": "#060c1e",
+  "display": "standalone",
+  "orientation": "any"
+}

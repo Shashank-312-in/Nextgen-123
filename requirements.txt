@@ -1,0 +1,18 @@
+fastapi
+uvicorn[standard]
+jinja2
+python-multipart
+itsdangerous
+pillow  # profile photo upload: validate real image content + resize (not hand-rolled, see webapp/photo_upload.py)
+reportlab  # official attendance register PDF generation, see sms_app/services/attendance_pdf.py
+pyserial  # absentee SMS: AT-command send over the USB/serial GSM modem, see webapp/sms_modem.py
+cryptography  # Aadhaar/APAAR field encryption at rest, see field_encryption.py
+mysql-connector-python
+pymysql
+openpyxl  # parses .xlsx for bulk student import, see api/routes_students.py's student_bulk_import
+python-dotenv  # loads .env (SMTP_HOST/SMTP_USERNAME/... for OTP email) in run_api.py
+requests  # HTTP client for database.py's proxy path (DB_PROXY_URL) — see db_proxy/
+httpx2  #its really httpx2
+pytest-html
+pytest-asyncio  # required to recognize @pytest.mark.asyncio in tests/test_08_db_proxy.py
+pypdf  # used by tests/test_security_hardening_offline.py to read back generated PDFs

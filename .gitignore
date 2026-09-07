@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+
+# Environment & local DB
+.env
+.env.test
+*.db
+sms.db
+*.sqlite
+*.sqlite3
+
+.pytest_cache
+
+.venv/
+# Build outputs
+frontend/dist/
+frontend/node_modules/
+
+USERMANUAL.txt
+
+IMPLEMENTATION_STATE.md
+VERSION.md
+spec.md
+build_summary.py
+
+reports/
+
+webapp/uploads/
+# Executables
+cloudflared.exe
+*.exe
+custom_users.json
+mysql_data/
+test_results.log
+# Database backups must never be committed or shipped with source
+backups/
