@@ -7,7 +7,7 @@ HOD-only for every route per spec §7.5.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from database import (
     audit, connect, create_user, reset_student_password,
@@ -230,7 +230,7 @@ async def delete_account(account_id: int, user: CurrentUser = Depends(get_curren
         # 3. Clean problem reports submitted by this user
         c.execute("DELETE FROM problem_reports WHERE username=?", (username,))
         # 4. Clean SMS gateways assigned to this user
-        c.execute("DELETE FROM sms_gateways WHERE hod_username=? OR owner_username=?", (username, username))
+        c.execute("DELETE FROM sms_gateways WHERE hod_username=?", (username,))
         # 5. Reassign attendance sessions created by this faculty to the current admin
         c.execute("UPDATE attendance_sessions SET faculty_username=? WHERE faculty_username=?", (user.username, username))
         c.execute("UPDATE attendance_sessions SET hod_username=? WHERE hod_username=?", (user.username, username))
@@ -246,70 +246,3 @@ async def delete_account(account_id: int, user: CurrentUser = Depends(get_curren
         c.execute("DELETE FROM users WHERE id=?", (account_id,))
         audit(c, user.username, "DELETE", "user", username)
     return ok({"deleted": True, "id": account_id, "username": username})
-
-class SmsAccessUpdateBody(BaseModel):
-    enabled: bool = False
-    batch_ids: list[int] = Field(default_factory=list)
-
-
-@router.get("/sms-access")
-async def get_sms_access_control(user: CurrentUser = Depends(get_current_user)):
-    """HOD/Admin SMS Gateway delegation control; separate from ordinary Faculty permissions."""
-    _require_hod_or_admin(user)
-    from sms_app.services.sms_access import list_hod_sms_access
-    with connect() as c:
-        if user.role == "HOD":
-            rows, batches = list_hod_sms_access(c, user.username)
-        else:
-            rows = c.execute("""
-                SELECT u.username, u.full_name, u.active, COALESCE(a.enabled,0) AS enabled
-                FROM users u LEFT JOIN sms_gateway_access a ON a.faculty_username=u.username
-                WHERE u.role='FACULTY' ORDER BY u.full_name,u.username
-            """).fetchall()
-            batches = c.execute("""
-                SELECT sem.id,sem.name,sem.code,COUNT(st.roll_no) AS student_count
-                FROM academic_semesters sem LEFT JOIN students st ON st.current_semester_id=sem.id AND st.active=1
-                GROUP BY sem.id,sem.name,sem.code,sem.sort_order ORDER BY sem.sort_order,sem.id
-            """).fetchall()
-            delegated = c.execute("SELECT faculty_username,semester_id FROM sms_gateway_batch_delegations WHERE active=1").fetchall()
-            by = {}
-            for d in delegated:
-                by.setdefault(d["faculty_username"], set()).add(int(d["semester_id"]))
-            for r in rows:
-                r["enabled"] = bool(r["enabled"])
-                r["allowed_batches"] = [dict(b) for b in batches if int(b["id"]) in by.get(r["username"], set())]
-    return ok({"faculty": [dict(r) for r in rows], "batches": [dict(b) for b in batches]})
-
-
-@router.post("/sms-access/{username}")
-async def save_sms_access(username: str, body: SmsAccessUpdateBody, user: CurrentUser = Depends(get_current_user)):
-    """HOD/Admin SMS Gateway delegation update; HOD scope is enforced by the service."""
-    _require_hod_or_admin(user)
-    from sms_app.services.sms_access import set_faculty_sms_access, list_hod_sms_access
-    # ADMIN may inspect/manage the entire college; HOD is strictly scope-bound.
-    with connect() as c:
-        target = c.execute("SELECT username,role,hod_username,active FROM users WHERE username=%s", (username,)).fetchone()
-        if not target or target.get("role") != "FACULTY":
-            raise ApiError("Faculty account not found", 404, "NOT_FOUND")
-        hod_username = user.username if user.role == "HOD" else (target.get("hod_username") or "")
-        if not hod_username:
-            raise ApiError("Faculty does not belong to an HOD scope", 400, "SCOPE_REQUIRED")
-        try:
-            set_faculty_sms_access(
-                c,
-                hod_username=hod_username,
-                faculty_username=username,
-                enabled=bool(body.enabled),
-                batch_ids=body.batch_ids,
-                actor=user.username,
-            )
-        except ValueError as exc:
-            raise ApiError(str(exc), 400, "SMS_ACCESS_VALIDATION")
-    # Return the current row through the same read path to keep the UI contract simple.
-    with connect() as c:
-        if user.role == "HOD":
-            rows, _ = list_hod_sms_access(c, user.username)
-        else:
-            rows, _ = list_hod_sms_access(c, hod_username)
-        item = next((dict(r) for r in rows if r["username"] == username), None)
-    return ok(item or {"username": username, "enabled": bool(body.enabled), "allowed_batches": []})

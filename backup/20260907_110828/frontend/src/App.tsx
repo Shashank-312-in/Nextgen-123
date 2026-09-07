@@ -192,7 +192,7 @@ export function App() {
       <Route
         path="/sms-log"
         element={
-          <Guard user={user} reload={reload} condition={user?.role === "HOD" || user?.role === "ADMIN" || user?.role === "FACULTY"} fallback="/">
+          <Guard user={user} reload={reload} condition={user?.role === "HOD" || user?.role === "ADMIN"} fallback="/">
             <SmsLogPage user={user!} onLoggedOut={handleLoggedOut} />
           </Guard>
         }

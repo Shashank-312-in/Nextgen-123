@@ -2,7 +2,7 @@
 // Mirrors webapp/routes/faculty.py + templates/faculty/list.html.
 // Sections are COLLAPSED BY DEFAULT, expanding on click.
 // All errors/failures displayed in RED (.error-banner)
-import { useState, useEffect, type CSSProperties } from "react";
+import { useState, useEffect } from "react";
 import { AppShell } from "../../components/AppShell";
 import { ErrorPopup } from "../../components/ErrorPopup";
 import { ToastPopup } from "../../components/ToastPopup";
@@ -10,7 +10,6 @@ import {
   getFacultyPage, createAccount, toggleAccountStatus, resetStudentPassword, deleteAccount,
   saveRolePermissions, getUserPermissions, saveUserPermissions,
   type FacultyPageData, type UserAccount, type RolePermission, type UserPermission,
-  getSmsAccessControl, saveSmsAccess, type FacultySmsAccessData, type FacultySmsAccessRow,
 } from "../../api/faculty";
 import { ApiClientError } from "../../api/client";
 import { type CurrentUser } from "../../api/auth";
@@ -30,13 +29,6 @@ export function FacultyPage({ user, onLoggedOut }: Props) {
   const [showHours, setShowHours] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showPermissions, setShowPermissions] = useState(false);
-  const [showSmsDelegation, setShowSmsDelegation] = useState(false);
-  const [smsAccess, setSmsAccess] = useState<FacultySmsAccessData | null>(null);
-  const [smsAccessFaculty, setSmsAccessFaculty] = useState<FacultySmsAccessRow | null>(null);
-  const [smsAccessEnabled, setSmsAccessEnabled] = useState(false);
-  const [smsBatchIds, setSmsBatchIds] = useState<number[]>([]);
-  const [loadingSmsAccess, setLoadingSmsAccess] = useState(false);
-  const [savingSmsAccess, setSavingSmsAccess] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [revealedCreds, setRevealedCreds] = useState<{ username: string; password: string } | null>(null);
@@ -84,26 +76,6 @@ export function FacultyPage({ user, onLoggedOut }: Props) {
       setError(err instanceof ApiClientError ? err.message : "Failed to load faculty page");
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function loadSmsDelegation() {
-    setLoadingSmsAccess(true);
-    try {
-      const d = await getSmsAccessControl();
-      setSmsAccess(d);
-      if (smsAccessFaculty) {
-        const fresh = d.faculty.find((f) => f.username === smsAccessFaculty.username) || null;
-        setSmsAccessFaculty(fresh);
-        if (fresh) {
-          setSmsAccessEnabled(fresh.enabled);
-          setSmsBatchIds(fresh.allowed_batches.map((b) => b.id));
-        }
-      }
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Failed to load SMS Gateway delegation");
-    } finally {
-      setLoadingSmsAccess(false);
     }
   }
 
@@ -374,30 +346,6 @@ export function FacultyPage({ user, onLoggedOut }: Props) {
         )}
       </div>
 
-      {/* ── SMS Gateway Delegation (separate from ordinary Faculty permissions) ── */}
-      <div className="collapsible" style={{ marginBottom: 18 }}>
-        <div className="collapsible-trigger" onClick={() => { const next = !showSmsDelegation; setShowSmsDelegation(next); if (next && !smsAccess) void loadSmsDelegation(); }}>
-          <span><span style={{ marginRight: 8, fontSize: 12 }}>{showSmsDelegation ? "▼" : "▶"}</span>📲 SMS GATEWAY DELEGATION</span>
-          <span style={{ fontSize: 12, color: "#38bdf8", fontWeight: 700 }}>{showSmsDelegation ? "Click to collapse" : "Manage SMS-only access"}</span>
-        </div>
-        {showSmsDelegation && (
-          <div className="collapsible-body" style={{ padding: 20 }}>
-            <p className="subtitle-muted" style={{ marginBottom: 16 }}>Grant SMS Gateway access only. This control does not modify Faculty attendance, marks, reports, profile, or general student permissions.</p>
-            {loadingSmsAccess ? <p className="empty-note">Loading SMS delegation…</p> : !smsAccess ? <p className="empty-note">No SMS delegation data available.</p> : (
-              <div style={{ display: "grid", gap: 12 }}>
-                {smsAccess.faculty.map((fac) => (
-                  <div key={fac.username} style={{ display: "grid", gridTemplateColumns: "minmax(180px,1fr) minmax(180px,2fr) auto", gap: 12, alignItems: "center", padding: 14, border: "1px solid var(--border)", borderRadius: 12, background: "var(--card-glass)" }}>
-                    <div><div style={{ fontWeight: 800, color: "var(--text)" }}>{fac.full_name || fac.username}</div><div style={{ fontSize: 12, color: "var(--muted)" }}>@{fac.username}</div></div>
-                    <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>{fac.enabled ? (fac.allowed_batches.length ? fac.allowed_batches.map(b => <span key={b.id} style={smsChip}>{b.code || b.name}</span>) : <span style={{ ...smsChip, color: "#dc2626" }}>No batch delegated</span>) : <span style={{ ...smsChip, color: "var(--muted)" }}>Disabled</span>}</div>
-                    <button className="btn btn-sm btn-primary" onClick={() => { setSmsAccessFaculty(fac); setSmsAccessEnabled(fac.enabled); setSmsBatchIds(fac.allowed_batches.map(b => b.id)); }}>{fac.enabled ? "Edit SMS Access" : "Grant SMS Access"}</button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
       {/* ── Create Account (Collapsible, collapsed by default) ── */}
       <div className="section-head">
         <h2>Faculty & User Accounts</h2>
@@ -516,26 +464,6 @@ export function FacultyPage({ user, onLoggedOut }: Props) {
         </table>
         {data?.accounts.length === 0 && <p className="empty-note">No faculty accounts found.</p>}
       </div>
-
-      {smsAccessFaculty && smsAccess && (
-        <div className="modal-overlay" onClick={() => !savingSmsAccess && setSmsAccessFaculty(null)}>
-          <div className="modal-box modal3dPopIn" style={{ maxWidth: 700, width: "94%", maxHeight: "90vh", overflowY: "auto", background: "var(--bg-card)" }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-              <h3 style={{ margin: 0, color: "var(--text)" }}>📲 SMS Gateway access — {smsAccessFaculty.full_name || smsAccessFaculty.username}</h3>
-              <button className="btn btn-sm btn-outline" onClick={() => setSmsAccessFaculty(null)}>✕</button>
-            </div>
-            <p style={{ ...subtleText, marginBottom: 16 }}>Only batches belonging to your HOD scope can be selected. The server rechecks this scope when saving and when sending.</p>
-            <label style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, fontWeight: 800, color: "var(--text)" }}><input type="checkbox" checked={smsAccessEnabled} onChange={e => setSmsAccessEnabled(e.target.checked)} /> SMS Gateway Access Enabled</label>
-            {smsAccessEnabled && <div style={{ display: "grid", gap: 8 }}>
-              <div style={{ fontSize: 12, fontWeight: 800, color: "var(--heading-accent)", textTransform: "uppercase" }}>Allowed SMS recipient batches</div>
-              {smsAccess.batches.map((b) => <label key={b.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", border: "1px solid var(--border)", borderRadius: 10, cursor: "pointer" }}><input type="checkbox" checked={smsBatchIds.includes(b.id)} onChange={() => setSmsBatchIds(old => old.includes(b.id) ? old.filter(id => id !== b.id) : [...old, b.id])} /><span style={{ flex: 1, color: "var(--text)", fontWeight: 700 }}>{b.code || b.name}</span><span style={{ color: "var(--muted)", fontSize: 12 }}>{b.student_count} students</span></label>)}
-              {!smsAccess.batches.length && <div className="empty-note">No active student batches exist in this HOD scope.</div>}
-            </div>}
-            {!smsAccessEnabled && <div style={{ padding: 14, borderRadius: 10, background: "var(--chip-bg-muted)", color: "var(--muted)" }}>Revoking access removes all delegated SMS batches immediately.</div>}
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 20 }}><button className="btn btn-outline" onClick={() => setSmsAccessFaculty(null)} disabled={savingSmsAccess}>Cancel</button><button className="btn btn-primary" onClick={async () => { setSavingSmsAccess(true); try { const saved = await saveSmsAccess(smsAccessFaculty.username, { enabled: smsAccessEnabled, batch_ids: smsAccessEnabled ? smsBatchIds : [] }); setNotice(`SMS Gateway access updated for ${smsAccessFaculty.username}`); setSmsAccessFaculty(null); setSmsBatchIds([]); await loadSmsDelegation(); } catch (err) { setError(err instanceof ApiClientError ? err.message : "Failed to save SMS Gateway access"); } finally { setSavingSmsAccess(false); } }} disabled={savingSmsAccess}>{savingSmsAccess ? "Saving…" : "Save SMS Access"}</button></div>
-          </div>
-        </div>
-      )}
 
       {/* Profile Access Selection Modal */}
       {selectedAccount && (
@@ -899,7 +827,3 @@ export function FacultyPage({ user, onLoggedOut }: Props) {
     </AppShell>
   );
 }
-
-
-const smsChip: CSSProperties = { display: "inline-flex", padding: "5px 8px", borderRadius: 999, background: "var(--chip-bg-muted)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 11, fontWeight: 800 };
-const subtleText: CSSProperties = { color: "var(--muted)", fontSize: 12.5, lineHeight: 1.5 };

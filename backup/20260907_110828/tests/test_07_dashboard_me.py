@@ -93,11 +93,10 @@ class TestStudentSubjectHistoryRBAC:
 
 
 class TestAuditAndSmsLogRBAC:
-    """Audit/sms endpoints enforce their intended role boundaries.
-
-    SMS log is HOD/ADMIN visible and is also exposed to Faculty only when
-    SMS Gateway delegation is active; sms-settings remains HOD/ADMIN-only.
-    """
+    """audit-log / sms-log / sms-settings GET are HOD-only with NO ADMIN
+    carve-out (routes_dashboard.py: `if user.role != "HOD"`), unlike the
+    POST mutators (sms-settings/sms-test/sms-trigger) which DO allow
+    ADMIN. Tested as written, not as might be assumed."""
 
     def test_audit_log_forbidden_for_faculty(self, client, faculty_headers):
         r = client.get("/api/dashboard/audit-log", headers=faculty_headers)

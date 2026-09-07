@@ -76,7 +76,7 @@ def _gateway_ready_without_decrypt(gateway):
 
 
 def _auto_send_enabled(c, hod_username):
-    row = c.execute("SELECT auto_send FROM sms_gateways WHERE hod_username=%s AND owner_username=%s AND active=1", (hod_username, hod_username)).fetchone()
+    row = c.execute("SELECT auto_send FROM sms_gateways WHERE hod_username=%s AND active=1", (hod_username,)).fetchone()
     return bool(row and row.get("auto_send"))
 
 
@@ -139,8 +139,8 @@ def queue_absentees_for_session(session_id, absent_roll_nos, actor="system"):
 
         gateway = c.execute("""
             SELECT id, active, gateway_mode, device_id, username, password, local_url, modem_port
-            FROM sms_gateways WHERE hod_username=%s AND owner_username=%s
-        """, (hod_username, hod_username)).fetchone()
+            FROM sms_gateways WHERE hod_username=%s
+        """, (hod_username,)).fetchone()
 
         for roll_no in absent_roll_nos:
             student = c.execute("""
@@ -257,8 +257,8 @@ def approve_sms_batch(hod_username: str, send_date: str, actor: str):
             return 0
 
         active_gateway = c.execute(
-            "SELECT * FROM sms_gateways WHERE hod_username=%s AND owner_username=%s AND active=1",
-            (hod_username, hod_username),
+            "SELECT * FROM sms_gateways WHERE hod_username=%s AND active=1",
+            (hod_username,),
         ).fetchone()
 
         updates = []
@@ -326,7 +326,7 @@ def approve_sms(queue_id: int, hod_username: str, actor: str):
             raise ValueError("Cannot approve: student HOD ownership does not match this approval scope.")
         gateway = c.execute("SELECT * FROM sms_gateways WHERE id=%s", (row.get("gateway_id"),)).fetchone() if row.get("gateway_id") else None
         if not gateway:
-            gateway = c.execute("SELECT * FROM sms_gateways WHERE hod_username=%s AND owner_username=%s AND active=1", (hod_username, hod_username)).fetchone()
+            gateway = c.execute("SELECT * FROM sms_gateways WHERE hod_username=%s AND active=1", (hod_username,)).fetchone()
         if not gateway or not gateway["active"] or gateway.get("hod_username") != hod_username:
             raise ValueError("Cannot approve: no active gateway is assigned to this HOD.")
         ready, reason = _gateway_ready_without_decrypt(gateway)
@@ -368,83 +368,6 @@ def save_message_template(hod_username: str, message_type: str, template: str, a
     return template
 
 
-def send_general_notice_as_faculty(faculty_username: str, semester_id: int, message: str, actor: str):
-    """Queue a General Notice only for a batch delegated to this Faculty.
-
-    This is deliberately separate from the HOD path so the ordinary HOD queue
-    and approval semantics remain unchanged. The faculty gateway is always
-    resolved server-side from its owner_username; the client cannot choose a
-    different gateway or HOD scope.
-    """
-    message = str(message or "").strip()
-    if not message:
-        raise ValueError("General Notice message cannot be empty")
-    from sms_app.services.sms_access import faculty_can_use_batch, faculty_gateway, faculty_sms_enabled
-    with connect() as c:
-        access = c.execute(
-            "SELECT hod_username,enabled FROM sms_gateway_access WHERE faculty_username=%s",
-            (faculty_username,),
-        ).fetchone()
-        if not access or not bool(access.get("enabled")):
-            raise ValueError("SMS Gateway access has been revoked by your HOD")
-        hod_username = access["hod_username"]
-        faculty = c.execute(
-            "SELECT username,role,active,hod_username FROM users WHERE username=%s",
-            (faculty_username,),
-        ).fetchone()
-        if not faculty or faculty.get("role") != "FACULTY" or not bool(faculty.get("active")):
-            raise ValueError("Faculty account is inactive or unavailable")
-        if (faculty.get("hod_username") or "").strip().lower() != (hod_username or "").strip().lower():
-            raise ValueError("Faculty HOD scope no longer matches SMS delegation")
-        if not faculty_can_use_batch(c, faculty_username, semester_id):
-            raise ValueError("The selected batch is not delegated to you for SMS")
-
-        semester = c.execute("SELECT id FROM academic_semesters WHERE id=%s", (semester_id,)).fetchone()
-        if not semester:
-            raise ValueError("Selected batch does not exist")
-        gateway = faculty_gateway(c, faculty_username)
-        if not gateway or not gateway.get("active"):
-            raise ValueError("Configure an active SMS gateway before sending")
-        ready, reason = _gateway_ready_without_decrypt(gateway)
-        if not ready:
-            raise ValueError(reason)
-
-        students = c.execute("""
-            SELECT roll_no,name,parent_phone
-            FROM students
-            WHERE active=1 AND hod_username=%s AND current_semester_id=%s
-            ORDER BY roll_no
-        """, (hod_username, semester_id)).fetchall()
-        if not students:
-            raise ValueError("The delegated batch has no active students")
-
-        queued = 0
-        blocked = 0
-        for student in students:
-            phone = (student.get("parent_phone") or "").strip()
-            row_error = "Parent phone number is missing." if not phone else None
-            try:
-                msg = message.format(student=student["name"], date="", message=message)
-            except Exception as exc:
-                raise ValueError(f"Invalid SMS message template: {exc}") from exc
-            c.execute("""
-                INSERT INTO sms_queue(
-                    roll_no,parent_phone,message,attendance_session_id,send_date,
-                    hod_username,gateway_id,approved,message_type,status,error
-                ) VALUES(%s,%s,%s,NULL,CURRENT_DATE,%s,%s,%s,'GENERAL_NOTICE','PENDING',%s)
-            """, (student["roll_no"], phone, msg, hod_username, gateway["id"], int(not row_error), row_error))
-            if row_error:
-                blocked += 1
-            else:
-                queued += 1
-
-        audit(
-            c, actor, "GENERAL_NOTICE_QUEUED", "sms_queue",
-            f"faculty={faculty_username}; hod={hod_username}; semester_id={semester_id}; gateway={gateway['id']}; queued={queued}; blocked={blocked}; auto_send=1",
-        )
-        return {"queued_count": queued, "blocked_count": blocked, "template": message}
-
-
 def send_general_notice(hod_username: str, semester_id: int, message: str, actor: str):
     """Queue the same custom notice for every active student in one HOD batch."""
     message = str(message or "").strip()
@@ -465,7 +388,7 @@ def send_general_notice(hod_username: str, semester_id: int, message: str, actor
             WHERE active=1 AND hod_username=%s AND current_semester_id=%s
             ORDER BY roll_no
         """, (hod_username, semester_id)).fetchall()
-        gateway = c.execute("SELECT * FROM sms_gateways WHERE hod_username=%s AND owner_username=%s AND active=1", (hod_username, hod_username)).fetchone()
+        gateway = c.execute("SELECT * FROM sms_gateways WHERE hod_username=%s AND active=1", (hod_username,)).fetchone()
         ready, reason = _gateway_ready_without_decrypt(gateway or {})
         if not gateway:
             ready = False; reason = "No active SMS gateway is configured for this HOD."
@@ -594,14 +517,11 @@ def retry_failed_sms(sms_id: int, hod_username: str | None = None, actor="system
         return True
 
 
-def recent_sms(limit=100, hod_username=None, owner_username=None):
+def recent_sms(limit=100, hod_username=None):
     with connect() as c:
         where = ""
         params = [limit]
-        if owner_username:
-            where = "WHERE g.owner_username=%s"
-            params = [owner_username, limit]
-        elif hod_username:
+        if hod_username:
             where = "WHERE q.hod_username=%s"
             params = [hod_username, limit]
         return c.execute(f"""

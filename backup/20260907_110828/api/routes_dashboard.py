@@ -20,7 +20,6 @@ from urllib.parse import urlparse
 
 from database import connect, set_setting
 from sms_app.services.sms_credential_encryption import encrypt_secret, is_encrypted_secret
-from sms_app.services.sms_access import faculty_gateway, faculty_sms_enabled, faculty_can_use_batch, batches_for_faculty
 from sms_app.services.attendance_service import (
     absent_students_for_session,
     attendance_pct_band,
@@ -276,36 +275,12 @@ async def audit_log_endpoint(
         return ok(result)
 
 
-@router.get("/sms-access/me")
-async def get_my_sms_access(user: CurrentUser = Depends(get_current_user)):
-    if user.role != "FACULTY":
-        raise ApiError("Faculty access required", 403, "FORBIDDEN")
-    from sms_app.services.sms_access import faculty_sms_enabled, batches_for_faculty, faculty_gateway
-    with connect() as c:
-        access = c.execute("SELECT hod_username,enabled FROM sms_gateway_access WHERE faculty_username=%s", (user.username,)).fetchone()
-        enabled = bool(access and access.get("enabled"))
-        allowed = batches_for_faculty(c, user.username) if enabled else []
-        gw = faculty_gateway(c, user.username) if enabled else None
-    return ok({
-        "enabled": enabled,
-        "hod_username": access.get("hod_username") if access else None,
-        "allowed_batches": [dict(r) for r in allowed],
-        "gateway_configured": bool(gw),
-    })
-
-
 @router.get("/sms-log")
 async def sms_log_endpoint(user: CurrentUser = Depends(get_current_user)):
-    if user.role not in ("HOD", "ADMIN", "FACULTY"):
-        raise ApiError("SMS Gateway access required", status_code=403, code="FORBIDDEN")
+    if user.role != "HOD":
+        raise ApiError("HOD access only", status_code=403, code="FORBIDDEN")
     from sms_app.services.sms_service import recent_sms
-    if user.role == "FACULTY":
-        with connect() as c:
-            if not faculty_sms_enabled(c, user.username):
-                raise ApiError("SMS Gateway access has not been granted by your HOD", 403, "SMS_ACCESS_REQUIRED")
-        rows = recent_sms(150, owner_username=user.username)
-    else:
-        rows = recent_sms(150, hod_username=user.username if user.role == "HOD" else None)
+    rows = recent_sms(150, hod_username=user.username if user.role == "HOD" else None)
     return ok([dict(r) for r in rows])
 
 
@@ -378,7 +353,6 @@ def _gateway_visible(row) -> dict:
     return {
         "id": row["id"],
         "hod_username": row["hod_username"],
-        "owner_username": row.get("owner_username"),
         "gateway_name": row["gateway_name"],
         "gateway_mode": row["gateway_mode"],
         "device_id": "",
@@ -416,49 +390,21 @@ def _validate_gateway_body(body: SmsGatewayBody) -> None:
 
 @router.get("/sms-gateways")
 async def list_sms_gateways(user: CurrentUser = Depends(get_current_user)):
-    if user.role not in ("HOD", "ADMIN", "FACULTY"):
-        raise ApiError("SMS Gateway access required", 403, "FORBIDDEN")
+    if user.role not in ("HOD", "ADMIN"):
+        raise ApiError("HOD or Admin access only", 403, "FORBIDDEN")
     with connect() as c:
-        if user.role == "FACULTY":
-            if not faculty_sms_enabled(c, user.username):
-                raise ApiError("SMS Gateway access has not been granted by your HOD", 403, "SMS_ACCESS_REQUIRED")
-            rows = c.execute("SELECT * FROM sms_gateways WHERE owner_username=%s", (user.username,)).fetchall()
-        elif user.role == "HOD":
-            rows = c.execute("SELECT * FROM sms_gateways WHERE hod_username=%s AND (owner_username=%s OR owner_username IS NULL)", (user.username, user.username)).fetchall()
+        if user.role == "HOD":
+            rows = c.execute("SELECT * FROM sms_gateways WHERE hod_username=%s", (user.username,)).fetchall()
         else:
-            rows = c.execute("SELECT * FROM sms_gateways ORDER BY hod_username, owner_username").fetchall()
+            rows = c.execute("SELECT * FROM sms_gateways ORDER BY hod_username").fetchall()
     return ok([_gateway_visible(r) for r in rows])
 
 
 @router.post("/sms-gateways")
 async def create_sms_gateway(body: SmsGatewayBody, user: CurrentUser = Depends(get_current_user)):
-    if user.role not in ("HOD", "ADMIN", "FACULTY"):
-        raise ApiError("SMS Gateway access required", 403, "FORBIDDEN")
+    if user.role not in ("HOD", "ADMIN"):
+        raise ApiError("HOD or Admin access only", 403, "FORBIDDEN")
     _validate_gateway_body(body)
-    if user.role == "FACULTY":
-        with connect() as c:
-            access = c.execute("SELECT hod_username,enabled FROM sms_gateway_access WHERE faculty_username=%s", (user.username,)).fetchone()
-            if not access or not bool(access.get("enabled")):
-                raise ApiError("SMS Gateway access has not been granted by your HOD", 403, "SMS_ACCESS_REQUIRED")
-            hod_username = access["hod_username"]
-            existing = c.execute("SELECT id FROM sms_gateways WHERE owner_username=%s", (user.username,)).fetchone()
-            if existing:
-                raise ApiError("You already have an SMS gateway. Edit the existing gateway instead.", 409, "GATEWAY_EXISTS")
-            cur = c.execute("""
-                INSERT INTO sms_gateways(
-                    hod_username,owner_username,gateway_name,gateway_mode,device_id,local_url,username,password,
-                    modem_port,modem_baud,sim_number,auto_send,active
-                ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-            """, (
-                hod_username, user.username, body.gateway_name.strip() or "SMSGate Phone", body.gateway_mode.strip().lower(),
-                encrypt_secret(body.device_id), body.local_url, body.username, encrypt_secret(body.password),
-                body.modem_port, body.modem_baud, body.sim_number, 0, int(body.active),
-            ))
-            from database import audit
-            audit(c, user.username, "CREATE", "sms_gateway", f"owner={user.username}; hod={hod_username}; gateway={cur.lastrowid}")
-            row = c.execute("SELECT * FROM sms_gateways WHERE id=%s", (cur.lastrowid,)).fetchone()
-        return ok(_gateway_visible(row), status_code=201)
-
     hod_username = user.username if user.role == "HOD" else (body.hod_username or "").strip()
     if not hod_username:
         raise ApiError("A responsible HOD is required", 400, "VALIDATION_ERROR")
@@ -466,16 +412,16 @@ async def create_sms_gateway(body: SmsGatewayBody, user: CurrentUser = Depends(g
         hod = c.execute("SELECT username FROM users WHERE username=%s AND role='HOD' AND active=1", (hod_username,)).fetchone()
         if not hod:
             raise ApiError("Responsible HOD is not an active HOD account", 400, "VALIDATION_ERROR")
-        existing = c.execute("SELECT id FROM sms_gateways WHERE owner_username=%s", (hod_username,)).fetchone()
+        existing = c.execute("SELECT id FROM sms_gateways WHERE hod_username=%s", (hod_username,)).fetchone()
         if existing:
             raise ApiError("This HOD already has an SMS gateway. Edit the existing gateway instead.", 409, "GATEWAY_EXISTS")
         cur = c.execute("""
             INSERT INTO sms_gateways(
-                hod_username,owner_username,gateway_name,gateway_mode,device_id,local_url,username,password,
+                hod_username,gateway_name,gateway_mode,device_id,local_url,username,password,
                 modem_port,modem_baud,sim_number,auto_send,active
-            ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         """, (
-            hod_username, hod_username, body.gateway_name.strip() or "SMSGate Phone", body.gateway_mode.strip().lower(),
+            hod_username, body.gateway_name.strip() or "SMSGate Phone", body.gateway_mode.strip().lower(),
             encrypt_secret(body.device_id), body.local_url, body.username, encrypt_secret(body.password),
             body.modem_port, body.modem_baud, body.sim_number, 0, int(body.active),
         ))
@@ -487,20 +433,14 @@ async def create_sms_gateway(body: SmsGatewayBody, user: CurrentUser = Depends(g
 
 @router.patch("/sms-gateways/{gateway_id}")
 async def update_sms_gateway(gateway_id: int, body: SmsGatewayBody, user: CurrentUser = Depends(get_current_user)):
-    if user.role not in ("HOD", "ADMIN", "FACULTY"):
-        raise ApiError("SMS Gateway access required", 403, "FORBIDDEN")
+    if user.role not in ("HOD", "ADMIN"):
+        raise ApiError("HOD or Admin access only", 403, "FORBIDDEN")
     with connect() as c:
         row = c.execute("SELECT * FROM sms_gateways WHERE id=%s", (gateway_id,)).fetchone()
     if not row:
         raise ApiError("SMS gateway not found", 404, "NOT_FOUND")
     if user.role == "HOD" and row["hod_username"] != user.username:
         raise ApiError("You cannot edit another HOD's SMS gateway", 403, "FORBIDDEN")
-    if user.role == "FACULTY":
-        with connect() as c:
-            if not faculty_sms_enabled(c, user.username):
-                raise ApiError("SMS Gateway access has been revoked by your HOD", 403, "SMS_ACCESS_REVOKED")
-        if row.get("owner_username") != user.username:
-            raise ApiError("You cannot edit another Faculty's SMS gateway", 403, "FORBIDDEN")
 
     # Blank password on edit means keep the current password.
     mode = body.gateway_mode.strip().lower()
@@ -568,20 +508,14 @@ def _is_safe_gateway_host(hostname: str | None) -> bool:
 
 @router.post("/sms-gateways/{gateway_id}/test-connection")
 async def test_sms_gateway_connection(gateway_id: int, user: CurrentUser = Depends(get_current_user)):
-    if user.role not in ("HOD", "ADMIN", "FACULTY"):
-        raise ApiError("SMS Gateway access required", 403, "FORBIDDEN")
+    if user.role not in ("HOD", "ADMIN"):
+        raise ApiError("HOD or Admin access only", 403, "FORBIDDEN")
     with connect() as c:
         gateway = c.execute("SELECT * FROM sms_gateways WHERE id=%s", (gateway_id,)).fetchone()
     if not gateway:
         raise ApiError("SMS gateway not found", 404, "NOT_FOUND")
     if user.role == "HOD" and gateway["hod_username"] != user.username:
         raise ApiError("You cannot test another HOD's SMS gateway", 403, "FORBIDDEN")
-    if user.role == "FACULTY":
-        with connect() as c:
-            if not faculty_sms_enabled(c, user.username):
-                raise ApiError("SMS Gateway access has been revoked by your HOD", 403, "SMS_ACCESS_REVOKED")
-        if gateway.get("owner_username") != user.username:
-            raise ApiError("You cannot test another Faculty's SMS gateway", 403, "FORBIDDEN")
     mode = (gateway.get("gateway_mode") or "").lower()
     try:
         if mode == "cloud":
@@ -622,7 +556,7 @@ async def test_sms_gateway_connection(gateway_id: int, user: CurrentUser = Depen
 @router.post("/sms-gateways/{gateway_id}/auto-send")
 async def set_gateway_auto_send(gateway_id: int, enabled: bool = Query(...), user: CurrentUser = Depends(get_current_user)):
     if user.role not in ("HOD", "ADMIN"):
-        raise ApiError("SMS Gateway access required", 403, "FORBIDDEN")
+        raise ApiError("HOD or Admin access only", 403, "FORBIDDEN")
     with connect() as c:
         row = c.execute("SELECT id,hod_username FROM sms_gateways WHERE id=%s", (gateway_id,)).fetchone()
         if not row:
@@ -637,16 +571,9 @@ async def set_gateway_auto_send(gateway_id: int, enabled: bool = Query(...), use
 
 @router.get("/sms-templates")
 async def get_sms_templates(user: CurrentUser = Depends(get_current_user)):
-    if user.role not in ("HOD", "ADMIN", "FACULTY"):
-        raise ApiError("SMS Gateway access required", 403, "FORBIDDEN")
-    if user.role == "FACULTY":
-        with connect() as c:
-            access = c.execute("SELECT hod_username,enabled FROM sms_gateway_access WHERE faculty_username=%s", (user.username,)).fetchone()
-        if not access or not bool(access.get("enabled")):
-            raise ApiError("SMS Gateway access has not been granted by your HOD", 403, "SMS_ACCESS_REQUIRED")
-        hod_username = access["hod_username"]
-    else:
-        hod_username = user.username
+    if user.role not in ("HOD", "ADMIN"):
+        raise ApiError("HOD or Admin access only", 403, "FORBIDDEN")
+    hod_username = user.username
     with connect() as c:
         rows = c.execute("SELECT message_type,template FROM sms_message_templates WHERE hod_username=%s", (hod_username,)).fetchall()
     data = {r["message_type"]: r["template"] for r in rows}
@@ -670,14 +597,9 @@ async def save_sms_template(body: SmsTemplateBody, user: CurrentUser = Depends(g
 
 @router.get("/sms-batches")
 async def get_sms_batches(user: CurrentUser = Depends(get_current_user)):
-    if user.role not in ("HOD", "ADMIN", "FACULTY"):
-        raise ApiError("SMS Gateway access required", 403, "FORBIDDEN")
+    if user.role not in ("HOD", "ADMIN"):
+        raise ApiError("HOD or Admin access only", 403, "FORBIDDEN")
     with connect() as c:
-        if user.role == "FACULTY":
-            if not faculty_sms_enabled(c, user.username):
-                raise ApiError("SMS Gateway access has not been granted by your HOD", 403, "SMS_ACCESS_REQUIRED")
-            rows = batches_for_faculty(c, user.username)
-            return ok([dict(r) for r in rows])
         if user.role == "HOD":
             rows = c.execute("""SELECT sem.id,sem.name,sem.code,COUNT(s.roll_no) AS student_count
                                 FROM academic_semesters sem LEFT JOIN students s ON s.current_semester_id=sem.id AND s.active=1 AND s.hod_username=%s
@@ -691,15 +613,15 @@ async def get_sms_batches(user: CurrentUser = Depends(get_current_user)):
 
 @router.post("/sms-general-notice")
 async def create_general_notice(body: SmsGeneralNoticeBody, user: CurrentUser = Depends(get_current_user)):
-    if user.role not in ("HOD", "ADMIN", "FACULTY"):
-        raise ApiError("SMS Gateway access required", 403, "FORBIDDEN")
-    from sms_app.services.sms_service import send_general_notice, send_general_notice_as_faculty
+    if user.role not in ("HOD", "ADMIN"):
+        raise ApiError("HOD or Admin access only", 403, "FORBIDDEN")
+    # ADMIN is an explicit college-wide operator; HOD is restricted by students.hod_username.
+    from sms_app.services.sms_service import send_general_notice
     try:
         if user.role == "HOD":
             result = send_general_notice(user.username, body.semester_id, body.message, user.username)
-        elif user.role == "FACULTY":
-            result = send_general_notice_as_faculty(user.username, body.semester_id, body.message, user.username)
         else:
+            # Keep ADMIN semantics safe: require a concrete HOD scope by refusing to invent cross-scope notices.
             raise ApiError("General Notice must be sent from the responsible HOD scope", 400, "SCOPE_REQUIRED")
     except ValueError as exc:
         raise ApiError(str(exc), 400, "VALIDATION_ERROR")
@@ -892,28 +814,19 @@ async def save_student_self_edit_setting(body: StudentSelfEditSettingBody, user:
 
 @router.post("/sms-test")
 async def test_sms_gateway(body: SmsTestBody, user: CurrentUser = Depends(get_current_user)):
-    # Test SMS accepts an arbitrary phone number, so it is intentionally not part
-    # of Faculty delegation. This prevents a Faculty account from bypassing the
-    # batch-recipient rule with a direct API call.
     if user.role not in ("HOD", "ADMIN"):
-        raise ApiError("HOD or Admin access only", status_code=403, code="FORBIDDEN")
+        raise ApiError("Access denied", status_code=403, code="FORBIDDEN")
     with connect() as c:
         if body.gateway_id:
             gateway = c.execute("SELECT * FROM sms_gateways WHERE id=%s", (body.gateway_id,)).fetchone()
         elif user.role == "HOD":
-            gateway = c.execute("SELECT * FROM sms_gateways WHERE hod_username=%s AND owner_username=%s AND active=1", (user.username, user.username)).fetchone()
+            gateway = c.execute("SELECT * FROM sms_gateways WHERE hod_username=%s AND active=1", (user.username,)).fetchone()
         else:
             gateway = None
     if not gateway:
         raise ApiError("Select/configure an active SMS gateway before sending a test SMS", 400, "GATEWAY_NOT_CONFIGURED")
     if user.role == "HOD" and gateway["hod_username"] != user.username:
         raise ApiError("You cannot test another HOD's SMS gateway", 403, "FORBIDDEN")
-    if user.role == "FACULTY":
-        with connect() as c:
-            if not faculty_sms_enabled(c, user.username):
-                raise ApiError("SMS Gateway access has been revoked by your HOD", 403, "SMS_ACCESS_REVOKED")
-        if gateway.get("owner_username") != user.username:
-            raise ApiError("You cannot test another Faculty's SMS gateway", 403, "FORBIDDEN")
     from webapp.sms_worker import send_single_sms
     msg = body.message.strip() if body.message and body.message.strip() else "Dear Parent, Student has not attended college today (2026-08-21). - VCET CSD Dept"
     try:

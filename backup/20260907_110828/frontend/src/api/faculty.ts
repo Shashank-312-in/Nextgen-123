@@ -94,32 +94,3 @@ export async function getUserPermissions(username: string): Promise<{ username: 
 export async function saveUserPermissions(username: string, body: Partial<UserPermission>): Promise<{ ok: boolean; permissions: UserPermission }> {
   return apiFetch(`/api/faculty/accounts/${username}/permissions`, { method: "POST", body });
 }
-
-
-export interface SmsDelegatedBatch {
-  id: number;
-  name: string;
-  code: string;
-  student_count: number;
-}
-
-export interface FacultySmsAccessRow {
-  username: string;
-  full_name: string;
-  active: boolean;
-  enabled: boolean;
-  allowed_batches: SmsDelegatedBatch[];
-}
-
-export interface FacultySmsAccessData {
-  faculty: FacultySmsAccessRow[];
-  batches: SmsDelegatedBatch[];
-}
-
-export async function getSmsAccessControl(): Promise<FacultySmsAccessData> {
-  return apiFetch<FacultySmsAccessData>("/api/faculty/sms-access", { method: "GET" });
-}
-
-export async function saveSmsAccess(username: string, body: { enabled: boolean; batch_ids: number[] }): Promise<FacultySmsAccessRow> {
-  return apiFetch<FacultySmsAccessRow>(`/api/faculty/sms-access/${encodeURIComponent(username)}`, { method: "POST", body });
-}

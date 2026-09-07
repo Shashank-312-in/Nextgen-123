@@ -29,19 +29,6 @@ export interface SmsLogRow {
   sent_at: string | null;
 }
 
-export interface SmsAccessBatch { id: number; name: string; code: string; student_count: number; }
-
-export interface SmsAccessMe {
-  enabled: boolean;
-  hod_username: string | null;
-  allowed_batches: SmsAccessBatch[];
-  gateway_configured: boolean;
-}
-
-export async function getMySmsAccess(): Promise<SmsAccessMe> {
-  return apiFetch<SmsAccessMe>("/api/dashboard/sms-access/me", { method: "GET" });
-}
-
 export interface SmsSettings {
   sms_enabled: string;
   sms_daily_cap: string;
@@ -52,7 +39,6 @@ export interface SmsSettings {
 export interface SmsGateway {
   id: number;
   hod_username: string;
-  owner_username?: string | null;
   gateway_name: string;
   gateway_mode: "cloud" | "local" | "modem" | string;
   device_id: string;

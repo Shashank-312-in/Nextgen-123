@@ -11,7 +11,6 @@ import os
 
 from database import connect, get_setting
 from sms_app.services.sms_service import mark_failed, mark_sent, pending_sms, sms_enabled
-from sms_app.services.sms_access import validate_delegated_queue_row
 from sms_app.services.sms_credential_encryption import decrypt_secret
 from webapp.sms_modem import ModemError, send_sms
 from webapp.sms_android_gateway import AndroidGatewayError, send_android_sms
@@ -50,13 +49,6 @@ def _gateway_for_row(row):
 def _validate_gateway_owner(row, gateway):
     if row.get("hod_username") and gateway.get("hod_username") != row["hod_username"]:
         raise GatewayConfigurationError("SMS gateway ownership does not match the queued HOD scope")
-    owner = str(gateway.get("owner_username") or "").strip().lower()
-    hod = str(gateway.get("hod_username") or "").strip().lower()
-    if owner and owner != hod:
-        with connect() as c:
-            reason = validate_delegated_queue_row(c, row, gateway)
-        if reason:
-            raise GatewayConfigurationError(reason)
 
 
 def send_single_sms(phone, message, gateway=None, *, message_id=None):

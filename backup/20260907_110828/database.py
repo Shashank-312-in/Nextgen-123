@@ -926,8 +926,7 @@ def init_db(db_name=None):
         c.execute("""
         CREATE TABLE IF NOT EXISTS sms_gateways(
             id INT AUTO_INCREMENT PRIMARY KEY,
-            hod_username VARCHAR(64) NOT NULL,
-            owner_username VARCHAR(64) NULL,
+            hod_username VARCHAR(64) NOT NULL UNIQUE,
             gateway_name VARCHAR(128) NOT NULL DEFAULT 'SMSGate Phone',
             gateway_mode VARCHAR(16) NOT NULL DEFAULT 'cloud',
             device_id VARCHAR(255),
@@ -941,69 +940,7 @@ def init_db(db_name=None):
             active TINYINT(1) NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            UNIQUE KEY uq_sms_gateway_owner (owner_username),
-            FOREIGN KEY(hod_username) REFERENCES users(username) ON UPDATE CASCADE ON DELETE RESTRICT,
-            FOREIGN KEY(owner_username) REFERENCES users(username) ON UPDATE CASCADE ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-        """)
-
-        existing_gateway_owner_cols = {row["Field"] if "Field" in row else row["name"] for row in c.execute("SHOW COLUMNS FROM sms_gateways").fetchall()}
-        if "owner_username" not in existing_gateway_owner_cols:
-            c.execute("ALTER TABLE sms_gateways ADD COLUMN owner_username VARCHAR(64) NULL AFTER hod_username")
-        c.execute("UPDATE sms_gateways SET owner_username=hod_username WHERE owner_username IS NULL OR owner_username=''")
-        # Legacy deployments used UNIQUE(hod_username). Multiple Faculty gateway
-        # owners now share one HOD scope, so uniqueness belongs to owner_username.
-        idx_rows = c.execute("SHOW INDEX FROM sms_gateways").fetchall()
-        for idx_name in {r.get("Key_name") for r in idx_rows if r.get("Key_name") and r.get("Key_name") != "PRIMARY"}:
-            parts = [r for r in idx_rows if r.get("Key_name") == idx_name]
-            ordered = sorted(parts, key=lambda x: int(x.get("Seq_in_index") or 0))
-            cols = [r.get("Column_name") for r in ordered]
-            if cols == ["hod_username"] and any(int(r.get("Non_unique", 1)) == 0 for r in parts):
-                try:
-                    c.execute(f"ALTER TABLE sms_gateways DROP INDEX `{idx_name}`")
-                except Exception:
-                    pass
-        owner_idx = c.execute("SHOW INDEX FROM sms_gateways").fetchall()
-        if not any(r.get("Key_name") == "uq_sms_gateway_owner" for r in owner_idx):
-            try:
-                c.execute("ALTER TABLE sms_gateways ADD UNIQUE KEY uq_sms_gateway_owner (owner_username)")
-            except Exception:
-                pass
-        owner_fk_rows = c.execute("""
-            SELECT CONSTRAINT_NAME FROM information_schema.KEY_COLUMN_USAGE
-            WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='sms_gateways'
-              AND COLUMN_NAME='owner_username' AND REFERENCED_TABLE_NAME='users'
-        """).fetchall()
-        if not owner_fk_rows:
-            try:
-                c.execute("ALTER TABLE sms_gateways ADD CONSTRAINT fk_sms_gateway_owner_username FOREIGN KEY(owner_username) REFERENCES users(username) ON UPDATE CASCADE ON DELETE CASCADE")
-            except Exception:
-                pass
-
-        c.execute("""
-        CREATE TABLE IF NOT EXISTS sms_gateway_access(
-            faculty_username VARCHAR(64) NOT NULL PRIMARY KEY,
-            hod_username VARCHAR(64) NOT NULL,
-            enabled TINYINT(1) NOT NULL DEFAULT 0 CHECK(enabled IN (0,1)),
-            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            FOREIGN KEY(faculty_username) REFERENCES users(username) ON UPDATE CASCADE ON DELETE CASCADE,
-            FOREIGN KEY(hod_username) REFERENCES users(username) ON UPDATE CASCADE ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-        """)
-
-        c.execute("""
-        CREATE TABLE IF NOT EXISTS sms_gateway_batch_delegations(
-            faculty_username VARCHAR(64) NOT NULL,
-            hod_username VARCHAR(64) NOT NULL,
-            semester_id INT NOT NULL,
-            active TINYINT(1) NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
-            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            PRIMARY KEY(faculty_username, semester_id),
-            FOREIGN KEY(faculty_username) REFERENCES users(username) ON UPDATE CASCADE ON DELETE CASCADE,
-            FOREIGN KEY(hod_username) REFERENCES users(username) ON UPDATE CASCADE ON DELETE CASCADE,
-            FOREIGN KEY(semester_id) REFERENCES academic_semesters(id) ON DELETE CASCADE
+            FOREIGN KEY(hod_username) REFERENCES users(username) ON UPDATE CASCADE ON DELETE RESTRICT
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
         """)
 
@@ -1198,9 +1135,9 @@ def init_db(db_name=None):
         # Create one cloud gateway placeholder for the HOD if none exists.
         if hod_username:
             c.execute("""
-                INSERT IGNORE INTO sms_gateways(hod_username,owner_username,gateway_name,gateway_mode,active)
-                VALUES(%s,%s,%s,'cloud',1)
-            """, (hod_username, hod_username, f"{hod_username} SMSGate"))
+                INSERT IGNORE INTO sms_gateways(hod_username,gateway_name,gateway_mode,active)
+                VALUES(%s,%s,'cloud',1)
+            """, (hod_username, f"{hod_username} SMSGate"))
 
         c.execute("""
         CREATE TABLE IF NOT EXISTS academic_calendar(
@@ -1411,14 +1348,14 @@ def init_db(db_name=None):
             c.execute("UPDATE students SET hod_username=%s WHERE department='CSD' AND (hod_username IS NULL OR hod_username='')", (hod_username,))
             c.execute("UPDATE attendance_sessions a JOIN users u ON u.username=a.faculty_username SET a.hod_username=%s WHERE u.department='CSD' AND a.hod_username IS NULL", (hod_username,))
             c.execute("""
-                INSERT IGNORE INTO sms_gateways(hod_username,owner_username,gateway_name,gateway_mode,active)
-                VALUES(%s,%s,%s,'cloud',1)
-            """, (hod_username, hod_username, f"{hod_username} SMSGate"))
+                INSERT IGNORE INTO sms_gateways(hod_username,gateway_name,gateway_mode,active)
+                VALUES(%s,%s,'cloud',1)
+            """, (hod_username, f"{hod_username} SMSGate"))
 
             c.execute("""
                 UPDATE sms_queue q
                 JOIN students st ON st.roll_no=q.roll_no
-                JOIN sms_gateways g ON g.hod_username=st.hod_username AND g.owner_username=g.hod_username
+                JOIN sms_gateways g ON g.hod_username=st.hod_username
                 SET q.hod_username=st.hod_username, q.gateway_id=g.id
                 WHERE q.gateway_id IS NULL AND st.hod_username=%s
             """, (hod_username,))
