@@ -29,7 +29,7 @@ import {
   type SmsAccessMe,
 } from "../../api/logs";
 import { ApiClientError } from "../../api/client";
-import { getFacultyPage, type UserAccount } from "../../api/faculty";
+import { getFacultyPage, getSmsAccessControl, type UserAccount, type FacultySmsAccessData } from "../../api/faculty";
 import { AdminStudentSelfEditCard } from "../../components/AdminStudentSelfEditCard";
 
 interface Props {
@@ -107,6 +107,7 @@ export function SmsLogPage({ user, onLoggedOut }: Props) {
   const [logs, setLogs] = useState<SmsLogRow[]>([]);
   const [testPhone, setTestPhone] = useState("");
   const [facultyAccess, setFacultyAccess] = useState<SmsAccessMe | null>(null);
+  const [hodSmsAccess, setHodSmsAccess] = useState<FacultySmsAccessData | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -114,8 +115,8 @@ export function SmsLogPage({ user, onLoggedOut }: Props) {
 
   const currentGateway = useMemo(() => {
     if (isAdmin) return gateways.find((g) => g.hod_username === selectedHodUsername) || null;
-    if (isFaculty) return gateways.find((g) => g.owner_username === user.username) || gateways[0] || null;
-    return gateways.find((g) => g.id === selectedGatewayId) || gateways[0] || null;
+    if (isFaculty) return gateways.find((g) => g.owner_username === user.username) || null;
+    return gateways.find((g) => g.owner_username === user.username && g.hod_username === user.username) || gateways[0] || null;
   }, [gateways, selectedGatewayId, selectedHodUsername, isAdmin, isFaculty, user.username]);
 
   const gatewayConfigured = Boolean(currentGateway && (
@@ -157,9 +158,10 @@ export function SmsLogPage({ user, onLoggedOut }: Props) {
         return;
       }
 
-      const [settingsData, gatewayData, logData, approvalData, templateData, batchData, facultyData] = await Promise.all([
+      const [settingsData, gatewayData, logData, approvalData, templateData, batchData, facultyData, accessData] = await Promise.all([
         getSmsSettings(), getSmsGateways(), getSmsLogs(), getSmsApproval(approvalDate), getSmsTemplates(), getSmsBatches(),
         isAdmin ? getFacultyPage() : Promise.resolve(null),
+        isHod ? getSmsAccessControl() : Promise.resolve(null),
       ]);
       setSettings(settingsData);
       setGateways(gatewayData);
@@ -168,6 +170,7 @@ export function SmsLogPage({ user, onLoggedOut }: Props) {
       setTemplates(templateData);
       setComposeText(templateData[messageType] || "");
       setBatches(batchData);
+      setHodSmsAccess(accessData);
       if (selectedBatchId === null && batchData.length) setSelectedBatchId(batchData[0].id);
       const facultyHods = facultyData ? facultyData.accounts.filter((a) => a.role === "HOD" && a.active) : [];
       // Keep the Admin HOD selector usable even when the Faculty roster is
@@ -180,8 +183,8 @@ export function SmsLogPage({ user, onLoggedOut }: Props) {
       setHodAccounts(facultyHods.length ? facultyHods : fallbackHods);
       if (gatewayData.length) {
         const chosen = isAdmin
-          ? (gatewayData.find((g) => g.hod_username === selectedHodUsername) || gatewayData[0])
-          : (gatewayData.find((g) => g.id === selectedGatewayId) || gatewayData[0]);
+          ? (gatewayData.find((g) => g.hod_username === selectedHodUsername && g.owner_username === selectedHodUsername) || gatewayData.find((g) => g.hod_username === selectedHodUsername) || gatewayData[0])
+          : (gatewayData.find((g) => g.hod_username === user.username && g.owner_username === user.username) || gatewayData.find((g) => g.id === selectedGatewayId) || gatewayData[0]);
         setSelectedGatewayId(chosen.id);
         setGateway(formFromGateway(chosen));
         if (isAdmin) setSelectedHodUsername(chosen.hod_username || "");
@@ -291,16 +294,43 @@ export function SmsLogPage({ user, onLoggedOut }: Props) {
       <ToastPopup message={success} onClose={() => setSuccess(null)} />
       <div style={{ display: "grid", gap: 18, maxWidth: 1100, margin: "0 auto" }}>
 
-        {isFaculty && facultyAccess && (
+        {isHod && (
           <section style={cardStyle}>
             <div style={headerStyle}>
-              <div><div style={eyebrow}>SMS ACCESS</div><h2 style={titleStyle}>Delegated batches</h2><p style={muted}>Your SMS permission is owned by your HOD. Recipient selection is restricted to the batches shown here and is rechecked by the server on every send.</p></div>
-              <span style={pill("good")}>ENABLED</span>
+              <div>
+                <div style={eyebrow}>SMS GATEWAY HANDLERS</div>
+                <h2 style={titleStyle}>Faculty gateway handlers</h2>
+                <p style={muted}>Faculty shown here are delegated to handle SMS for batches inside your department. Their phones and credentials remain private to their own accounts; you only see routing status and logs.</p>
+              </div>
+              <span style={pill("good")}>{(hodSmsAccess?.faculty || []).filter(f => f.enabled).length} ACTIVE</span>
             </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {facultyAccess.allowed_batches.map((b) => <span key={b.id} style={batchPillStyle}>{b.code || b.name} · {b.student_count}</span>)}
-            </div>
-            {facultyAccess.allowed_batches.length === 0 && <div style={emptyStyle}>No batches have been delegated. Your gateway is not usable until at least one batch is assigned.</div>}
+            {!(hodSmsAccess?.faculty || []).some(f => f.enabled) ? (
+              <div style={emptyStyle}>No Faculty has been delegated SMS Gateway access yet. Open <strong>Faculty → Edit Access → SMS Gateway</strong> to assign a batch handler.</div>
+            ) : (
+              <div style={{ display: "grid", gap: 10 }}>
+                {(hodSmsAccess?.faculty || []).filter(f => f.enabled).map(f => {
+                  const g = gateways.find(x => x.owner_username === f.username && x.hod_username === user.username);
+                  const delegated = f.allowed_batches || [];
+                  const ready = Boolean(g && g.active && ((g.gateway_mode === "cloud" && g.device_id_configured && g.username && g.password_set) || (g.gateway_mode === "local" && g.local_url) || (g.gateway_mode === "modem" && g.modem_port)));
+                  return (
+                    <div key={f.username} style={handlerRowStyle}>
+                      <div style={{ minWidth: 180, flex: 1 }}>
+                        <strong style={{ color: "var(--text)" }}>{f.full_name || f.username}</strong>
+                        <div style={muted}>{f.username}</div>
+                      </div>
+                      <div style={{ minWidth: 190, flex: 1 }}>
+                        <div style={{ color: "var(--muted)", fontSize: 11, fontWeight: 800, textTransform: "uppercase" }}>Assigned batch</div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 5 }}>{delegated.length ? delegated.map(b => <span key={b.id} style={batchPillStyle}>{b.code || b.name} · {b.student_count ?? "—"}</span>) : <span style={{ ...batchPillStyle, color: "#dc2626" }}>No batch</span>}</div>
+                      </div>
+                      <div style={{ minWidth: 170, textAlign: "right" }}>
+                        <span style={pill(ready ? "good" : "bad")}>{ready ? "GATEWAY READY" : g ? "GATEWAY NOT READY" : "NOT CONFIGURED"}</span>
+                        <div style={{ ...muted, marginTop: 5 }}>{g?.gateway_name || "Faculty must configure gateway"}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </section>
         )}
 
@@ -309,7 +339,7 @@ export function SmsLogPage({ user, onLoggedOut }: Props) {
             <div>
               <div style={eyebrow}>SMS ROUTING</div>
               <h2 style={titleStyle}>{isAdmin ? "HOD SMSGate connections" : isFaculty ? "Your SMSGate connection" : "Your SMSGate connection"}</h2>
-              <p style={muted}>{isAdmin ? "Choose the responsible HOD to administer that HOD's gateway. Physical phone location does not affect routing." : isFaculty ? "This gateway is owned by your Faculty account. You may configure only your own credentials." : "This gateway belongs to your HOD scope."}</p>
+              <p style={muted}>{isAdmin ? "Choose the responsible HOD to administer that HOD's gateway. Physical phone location does not affect routing." : isFaculty ? "This gateway is owned by your Faculty account. You may configure only your own credentials." : "This is your department gateway. Faculty handler gateways for delegated batches are managed by their owners and their activity is visible below."}</p>
             </div>
             <span style={pill(!currentGateway?.active ? "muted" : gatewayConfigured ? "good" : "bad")}>{!currentGateway?.active ? "INACTIVE" : gatewayConfigured ? "READY" : "NOT CONFIGURED"}</span>
           </div>
@@ -317,11 +347,25 @@ export function SmsLogPage({ user, onLoggedOut }: Props) {
           {isAdmin && (
             <div style={{ display: "grid", gap: 7, marginBottom: 14 }}>
               <label style={fieldLabel}>Responsible HOD</label>
-              <select value={selectedHodUsername} onChange={(e) => { const username = e.target.value; setSelectedHodUsername(username); const g = gateways.find((x) => x.hod_username === username); if (g) { setSelectedGatewayId(g.id); setGateway(formFromGateway(g)); } else { setSelectedGatewayId(null); setGateway({ ...blankGateway, hod_username: username }); } }} style={inputStyle}>
+              <select value={selectedHodUsername} onChange={(e) => { const username = e.target.value; setSelectedHodUsername(username); const g = gateways.find((x) => x.hod_username === username && x.owner_username === username) || gateways.find((x) => x.hod_username === username); if (g) { setSelectedGatewayId(g.id); setGateway(formFromGateway(g)); } else { setSelectedGatewayId(null); setGateway({ ...blankGateway, hod_username: username }); } }} style={inputStyle}>
                 <option value="">Select an HOD</option>
                 {hodAccounts.map((h) => <option key={h.username} value={h.username}>{h.full_name || h.username} ({h.username})</option>)}
               </select>
               {!hodAccounts.length && <p style={muted}>No active HOD accounts were returned. Check the Faculty account roster.</p>}
+            </div>
+          )}
+
+          {isFaculty && facultyAccess && (
+            <div style={{ ...emptyStyle, textAlign: "left", marginBottom: 14, background: "var(--chip-bg-muted)" }}>
+              <strong style={{ color: "var(--text)" }}>Assigned to you</strong>
+              <div style={{ marginTop: 3, color: "var(--muted)" }}>{facultyAccess.hod_username || "Your HOD"}</div>
+              <div style={{ marginTop: 4, color: "var(--muted)" }}>Only your delegated batches may use this gateway. Physical phone location does not affect routing.</div>
+              <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginTop: 9 }}>
+                {facultyAccess.allowed_batches.map((b) => (
+                  <span key={b.id} style={batchPillStyle}>{b.code || b.name} · {b.student_count}</span>
+                ))}
+                {!facultyAccess.allowed_batches.length && <span style={{ ...batchPillStyle, color: "#dc2626" }}>No batch delegated</span>}
+              </div>
             </div>
           )}
 
@@ -353,7 +397,7 @@ export function SmsLogPage({ user, onLoggedOut }: Props) {
 
         {isFaculty ? (
           <section style={cardStyle}>
-            <div style={headerStyle}><div><div style={eyebrow}>SEND SMS</div><h2 style={titleStyle}>Send to a delegated batch</h2><p style={muted}>Only the selected delegated batch is eligible. The server validates every student and the gateway owner before enqueueing.</p></div></div>
+            <div style={headerStyle}><div><div style={eyebrow}>MESSAGE COMPOSER</div><h2 style={titleStyle}>Choose what to send</h2><p style={muted}>Like the HOD SMS screen, you manage messages here — but the selectable recipients are limited to the batches delegated to your Faculty account.</p></div></div>
             <div style={gridStyle}>
               <Field label="Allowed batch"><select style={inputStyle} value={selectedBatchId ?? ""} onChange={e => setSelectedBatchId(Number(e.target.value))}><option value="">Select batch</option>{batches.map(b => <option key={b.id} value={b.id}>{b.code || b.name} ({b.student_count})</option>)}</select></Field>
               <Field label="Message"><textarea style={{ ...inputStyle, minHeight: 118, resize: "vertical" }} value={composeText} onChange={e => setComposeText(e.target.value)} placeholder="Dear Parent, {student}: {message}" /></Field>
@@ -387,7 +431,7 @@ export function SmsLogPage({ user, onLoggedOut }: Props) {
 
         <section style={cardStyle}>
           <div style={headerStyle}><div><div style={eyebrow}>HISTORY</div><h2 style={titleStyle}>Recent SMS activity</h2></div></div>
-          {loading ? <div style={emptyStyle}>Loading…</div> : logs.length === 0 ? <div style={emptyStyle}>No SMS activity yet.</div> : <div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", color: "var(--text)" }}><thead><tr>{["Date", "Student", "Gateway", "Status", "Error"].map((h) => <th key={h} style={thStyle}>{h}</th>)}</tr></thead><tbody>{logs.map((r) => <tr key={r.id}><td style={tdStyle}>{r.created_at}</td><td style={tdStyle}>{r.roll_no}{r.student_name ? ` — ${r.student_name}` : ""}</td><td style={tdStyle}>{r.gateway_name || "Unassigned"}</td><td style={tdStyle}><span style={pill(r.status === "SENT" ? "good" : r.status === "FAILED" ? "bad" : "muted")}>{r.status}</span></td><td style={{ ...tdStyle, color: "var(--muted)" }}>{r.error || "—"}</td></tr>)}</tbody></table></div>}
+          {loading ? <div style={emptyStyle}>Loading…</div> : logs.length === 0 ? <div style={emptyStyle}>No SMS activity yet.</div> : <div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", color: "var(--text)" }}><thead><tr>{["Date", "Student", "Gateway", ...(isAdmin || isHod ? ["Handler"] : []), "Status", "Error"].map((h) => <th key={h} style={thStyle}>{h}</th>)}</tr></thead><tbody>{logs.map((r) => <tr key={r.id}><td style={tdStyle}>{r.created_at}</td><td style={tdStyle}>{r.roll_no}{r.student_name ? ` — ${r.student_name}` : ""}</td><td style={tdStyle}>{r.gateway_name || "Unassigned"}</td>{(isAdmin || isHod) && <td style={tdStyle}>{r.gateway_owner_name || r.gateway_owner_username || "HOD"}</td>}<td style={tdStyle}><span style={pill(r.status === "SENT" ? "good" : r.status === "FAILED" ? "bad" : "muted")}>{r.status}</span></td><td style={{ ...tdStyle, color: "var(--muted)" }}>{r.error || "—"}</td></tr>)}</tbody></table></div>}
         </section>
       </div>
     </AppShell>
@@ -406,6 +450,7 @@ const inputStyle: CSSProperties = { width: "100%", boxSizing: "border-box", padd
 const actionsStyle: CSSProperties = { display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 };
 const emptyStyle: CSSProperties = { padding: 18, borderRadius: 12, background: "var(--chip-bg-muted)", color: "var(--muted)", textAlign: "center" };
 const rowStyle: CSSProperties = { display: "flex", alignItems: "center", gap: 14, padding: 12, border: "1px solid var(--border)", borderRadius: 12, flexWrap: "wrap" };
+const handlerRowStyle: CSSProperties = { display: "flex", alignItems: "center", gap: 16, padding: 14, border: "1px solid var(--border)", borderRadius: 12, flexWrap: "wrap", background: "var(--input-bg)" };
 const thStyle: CSSProperties = { textAlign: "left", padding: "9px 8px", borderBottom: "1px solid var(--border)", fontSize: 11, color: "var(--muted)", textTransform: "uppercase" };
 const tdStyle: CSSProperties = { padding: "10px 8px", borderBottom: "1px solid var(--border)", fontSize: 12, verticalAlign: "top" };
 const checkStyle: CSSProperties = { display: "flex", gap: 10, alignItems: "center", marginTop: 12, color: "var(--text)", fontWeight: 700 };

@@ -33,6 +33,7 @@ from sms_app.services.attendance_service import (
 
 from api.deps import CurrentUser, get_current_user
 from api.envelope import ApiError, ok
+from sms_app.services.sms_access import faculty_sms_enabled, batches_for_faculty, faculty_gateway
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
@@ -304,8 +305,10 @@ async def sms_log_endpoint(user: CurrentUser = Depends(get_current_user)):
             if not faculty_sms_enabled(c, user.username):
                 raise ApiError("SMS Gateway access has not been granted by your HOD", 403, "SMS_ACCESS_REQUIRED")
         rows = recent_sms(150, owner_username=user.username)
+    elif user.role == "HOD":
+        rows = recent_sms(250, hod_username=user.username)
     else:
-        rows = recent_sms(150, hod_username=user.username if user.role == "HOD" else None)
+        rows = recent_sms(500)
     return ok([dict(r) for r in rows])
 
 
@@ -424,9 +427,9 @@ async def list_sms_gateways(user: CurrentUser = Depends(get_current_user)):
                 raise ApiError("SMS Gateway access has not been granted by your HOD", 403, "SMS_ACCESS_REQUIRED")
             rows = c.execute("SELECT * FROM sms_gateways WHERE owner_username=%s", (user.username,)).fetchall()
         elif user.role == "HOD":
-            rows = c.execute("SELECT * FROM sms_gateways WHERE hod_username=%s AND (owner_username=%s OR owner_username IS NULL)", (user.username, user.username)).fetchall()
+            rows = c.execute("SELECT * FROM sms_gateways WHERE hod_username=%s ORDER BY (owner_username=%s) DESC, owner_username", (user.username, user.username)).fetchall()
         else:
-            rows = c.execute("SELECT * FROM sms_gateways ORDER BY hod_username, owner_username").fetchall()
+            rows = c.execute("SELECT * FROM sms_gateways ORDER BY hod_username, (owner_username=hod_username) DESC, owner_username").fetchall()
     return ok([_gateway_visible(r) for r in rows])
 
 
@@ -621,14 +624,19 @@ async def test_sms_gateway_connection(gateway_id: int, user: CurrentUser = Depen
 
 @router.post("/sms-gateways/{gateway_id}/auto-send")
 async def set_gateway_auto_send(gateway_id: int, enabled: bool = Query(...), user: CurrentUser = Depends(get_current_user)):
-    if user.role not in ("HOD", "ADMIN"):
+    if user.role not in ("HOD", "ADMIN", "FACULTY"):
         raise ApiError("SMS Gateway access required", 403, "FORBIDDEN")
     with connect() as c:
-        row = c.execute("SELECT id,hod_username FROM sms_gateways WHERE id=%s", (gateway_id,)).fetchone()
+        row = c.execute("SELECT id,hod_username,owner_username FROM sms_gateways WHERE id=%s", (gateway_id,)).fetchone()
         if not row:
             raise ApiError("SMS gateway not found", 404, "NOT_FOUND")
         if user.role == "HOD" and row["hod_username"] != user.username:
             raise ApiError("You cannot change another HOD's auto-send setting", 403, "FORBIDDEN")
+        if user.role == "FACULTY":
+            if not faculty_sms_enabled(c, user.username):
+                raise ApiError("SMS Gateway access has been revoked by your HOD", 403, "SMS_ACCESS_REVOKED")
+            if row.get("owner_username") != user.username:
+                raise ApiError("You cannot change another Faculty's gateway", 403, "FORBIDDEN")
         c.execute("UPDATE sms_gateways SET auto_send=%s WHERE id=%s", (int(enabled), gateway_id))
         from database import audit
         audit(c, user.username, "UPDATE", "sms_gateway", f"gateway={gateway_id}; auto_send={int(enabled)}")

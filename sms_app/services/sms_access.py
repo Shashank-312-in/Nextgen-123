@@ -122,14 +122,20 @@ def list_hod_sms_access(c, hod_username: str):
     by_faculty = {r["username"]: [] for r in rows}
     delegated_rows = c.execute(
         """
-        SELECT d.faculty_username, sem.id, sem.name, sem.code
+        SELECT d.faculty_username, sem.id, sem.name, sem.code,
+               COUNT(st.roll_no) AS student_count
         FROM sms_gateway_batch_delegations d
         JOIN sms_gateway_access a
           ON a.faculty_username=d.faculty_username
          AND a.hod_username=d.hod_username
          AND a.enabled=1
         JOIN academic_semesters sem ON sem.id=d.semester_id
+        LEFT JOIN students st
+          ON st.current_semester_id=sem.id
+         AND st.active=1
+         AND LOWER(COALESCE(st.hod_username,''))=LOWER(d.hod_username)
         WHERE LOWER(d.hod_username)=LOWER(%s) AND d.active=1
+        GROUP BY d.faculty_username, sem.id, sem.name, sem.code, sem.sort_order
         ORDER BY sem.sort_order, sem.id
         """,
         (hod_username,),
@@ -137,6 +143,7 @@ def list_hod_sms_access(c, hod_username: str):
     for r in delegated_rows:
         by_faculty.setdefault(r["faculty_username"], []).append({
             "id": r["id"], "name": r["name"], "code": r["code"],
+            "student_count": int(r.get("student_count") or 0),
         })
 
     for row in rows:

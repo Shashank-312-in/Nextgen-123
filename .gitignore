@@ -36,3 +36,4 @@ mysql_data/
 test_results.log
 # Database backups must never be committed or shipped with source
 backups/
+backup/*

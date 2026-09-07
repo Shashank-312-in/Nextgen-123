@@ -90,6 +90,38 @@ def _template_for_scope(c, hod_username, message_type):
     return ABSENTEE_TEMPLATE if message_type == "ABSENTEE_ALERT" else "Dear Parent, {student}: {message} - VCET CSD Dept"
 
 
+
+
+def _gateway_for_sms_batch(c, hod_username: str, semester_id: int):
+    """Resolve the active SMS handler for one batch inside one HOD scope."""
+    delegated = c.execute("""
+        SELECT d.faculty_username
+        FROM sms_gateway_batch_delegations d
+        JOIN sms_gateway_access a
+          ON a.faculty_username=d.faculty_username
+         AND a.hod_username=d.hod_username
+         AND a.enabled=1
+        JOIN users u
+          ON u.username=d.faculty_username AND u.role='FACULTY' AND u.active=1
+        WHERE d.hod_username=%s AND d.semester_id=%s AND d.active=1
+        ORDER BY d.updated_at DESC, d.faculty_username
+        LIMIT 1
+    """, (hod_username, semester_id)).fetchone()
+    if delegated:
+        faculty_username = delegated.get("faculty_username")
+        gateway = c.execute(
+            "SELECT * FROM sms_gateways WHERE hod_username=%s AND owner_username=%s AND active=1",
+            (hod_username, faculty_username),
+        ).fetchone()
+        if gateway:
+            return gateway
+    # Keep the HOD fallback projection compatible with older deployments/tests.
+    # Real rows carry owner_username, while the old test double may not.
+    return c.execute(
+        "SELECT id, active, gateway_mode, device_id, username, password, local_url, modem_port, auto_send, owner_username FROM sms_gateways WHERE hod_username=%s AND owner_username=%s",
+        (hod_username, hod_username),
+    ).fetchone()
+
 def queue_absentees_for_session(session_id, absent_roll_nos, actor="system"):
     """Gate absentee SMS on the post-cutoff latest session and single-fire scope."""
     result = _empty_queue_result()
@@ -133,14 +165,9 @@ def queue_absentees_for_session(session_id, absent_roll_nos, actor="system"):
             "SELECT COUNT(*) AS n FROM sms_queue WHERE send_date=%s", (send_date,)
         ).fetchone()["n"]
         repeat_mode = repeat_every_attendance()
-        auto_send = _auto_send_enabled(c, hod_username)
+        auto_send = False
         template = _template_for_scope(c, hod_username, "ABSENTEE_ALERT")
         queued = blocked = duplicate = skipped_no_phone = cap_blocked = 0
-
-        gateway = c.execute("""
-            SELECT id, active, gateway_mode, device_id, username, password, local_url, modem_port
-            FROM sms_gateways WHERE hod_username=%s AND owner_username=%s
-        """, (hod_username, hod_username)).fetchone()
 
         for roll_no in absent_roll_nos:
             student = c.execute("""
@@ -165,26 +192,44 @@ def queue_absentees_for_session(session_id, absent_roll_nos, actor="system"):
             phone = (student.get("parent_phone") or "").strip()
             routing_error = None
             gateway_id = None
+            gateway = _gateway_for_sms_batch(c, hod_username, semester_id)
             if not student.get("hod_username") or student.get("hod_username") != hod_username:
                 routing_error = "Attendance/student HOD ownership mismatch; SMS is blocked until ownership is corrected."
             elif not phone:
                 routing_error = "Parent phone number is missing for this student."
             elif not gateway:
-                routing_error = "No SMS gateway is configured for this HOD."
+                routing_error = "No active SMS gateway is configured for this batch or HOD."
             elif not gateway["active"]:
-                routing_error = "The HOD's SMS gateway is inactive."
+                routing_error = "The assigned SMS gateway is inactive."
             else:
                 gateway_id = gateway["id"]
                 ready, reason = _gateway_ready_without_decrypt(gateway)
                 if not ready:
                     routing_error = reason
+                else:
+                    # Faculty gateways use their own saved auto-send flag.
+                    # The HOD test double may omit owner_username/auto_send, so
+                    # consult the HOD gateway setting only for an identifiable
+                    # HOD-owned fallback.
+                    selected_auto_send = bool(gateway.get("auto_send"))
+                    owner = gateway.get("owner_username")
+                    if owner in (None, "", hod_username):
+                        selected_auto_send = _auto_send_enabled(c, hod_username)
+                    if selected_auto_send:
+                        auto_send = True
 
             try:
                 message = template.format(student=student["name"], date=send_date, message="")
             except Exception as exc:
                 raise ValueError(f"Invalid saved absentee template: {exc}") from exc
 
-            approved = int(auto_send and not routing_error)
+            approved = int(
+                bool(gateway and (
+                    gateway.get("auto_send")
+                    or (gateway.get("owner_username") in (None, "", hod_username) and _auto_send_enabled(c, hod_username))
+                ))
+                and not routing_error
+            )
             status = "PENDING"
             cur = c.execute("""
                 INSERT INTO sms_queue(
@@ -605,10 +650,12 @@ def recent_sms(limit=100, hod_username=None, owner_username=None):
             where = "WHERE q.hod_username=%s"
             params = [hod_username, limit]
         return c.execute(f"""
-            SELECT q.*, s.name AS student_name, g.gateway_name, g.gateway_mode
+            SELECT q.*, s.name AS student_name, g.gateway_name, g.gateway_mode,
+                   g.owner_username AS gateway_owner_username, u.full_name AS gateway_owner_name
             FROM sms_queue q
             LEFT JOIN students s ON s.roll_no=q.roll_no
             LEFT JOIN sms_gateways g ON g.id=q.gateway_id
+            LEFT JOIN users u ON u.username=g.owner_username
             {where}
             ORDER BY q.created_at DESC LIMIT %s
         """, params).fetchall()

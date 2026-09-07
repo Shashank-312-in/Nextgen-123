@@ -24,6 +24,8 @@ export interface SmsLogRow {
   gateway_id?: number | null;
   gateway_name?: string | null;
   gateway_mode?: string | null;
+  gateway_owner_username?: string | null;
+  gateway_owner_name?: string | null;
   error: string | null;
   created_at: string;
   sent_at: string | null;

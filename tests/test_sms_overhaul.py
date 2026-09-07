@@ -135,6 +135,8 @@ def test_auto_send_sets_approved_without_manual_approval(monkeypatch):
             return Result(row={"auto_send":1})
         if q.startswith("SELECT template FROM sms_message_templates"):
             return Result(row=None)
+        if q.startswith("SELECT d.faculty_username FROM sms_gateway_batch_delegations"):
+            return Result(row=None)
         if q.startswith("SELECT id, active, gateway_mode"):
             return Result(row={"id":9,"active":1,"gateway_mode":"local","local_url":"http://x"})
         if q.startswith("SELECT name, parent_phone, hod_username FROM students"):
@@ -215,6 +217,8 @@ def test_cutoff_happy_path_single_fire_and_batch_isolation(monkeypatch):
         if q.startswith("SELECT auto_send FROM sms_gateways"):
             return Result(row={"auto_send": 0})
         if q.startswith("SELECT template FROM sms_message_templates"):
+            return Result(row=None)
+        if q.startswith("SELECT d.faculty_username FROM sms_gateway_batch_delegations"):
             return Result(row=None)
         if q.startswith("SELECT id, active, gateway_mode"):
             return Result(row={"id":9,"active":1,"gateway_mode":"local","local_url":"http://x"})

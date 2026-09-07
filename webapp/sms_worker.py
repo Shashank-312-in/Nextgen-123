@@ -50,6 +50,11 @@ def _gateway_for_row(row):
 def _validate_gateway_owner(row, gateway):
     if row.get("hod_username") and gateway.get("hod_username") != row["hod_username"]:
         raise GatewayConfigurationError("SMS gateway ownership does not match the queued HOD scope")
+    from sms_app.services.sms_access import validate_delegated_queue_row
+    with connect() as c:
+        reason = validate_delegated_queue_row(c, row, gateway)
+    if reason:
+        raise GatewayConfigurationError(reason)
     owner = str(gateway.get("owner_username") or "").strip().lower()
     hod = str(gateway.get("hod_username") or "").strip().lower()
     if owner and owner != hod:
