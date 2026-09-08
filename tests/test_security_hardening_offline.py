@@ -475,3 +475,58 @@ def test_student_pdf_escapes_markup_in_student_name():
     from pypdf import PdfReader
     text = "\n".join(page.extract_text() or "" for page in PdfReader(__import__('io').BytesIO(pdf)).pages)
     assert malicious in text
+
+@pytest.mark.asyncio
+async def test_admin_cannot_create_update_test_or_autosend_gateway(monkeypatch):
+    admin = dashboard.CurrentUser("admin1", "ADMIN", None)
+    body = dashboard.SmsGatewayBody(gateway_name="blocked", gateway_mode="local", local_url="http://example.com")
+
+    with pytest.raises(ApiError) as create_exc:
+        await dashboard.create_sms_gateway(body, user=admin)
+    assert create_exc.value.status_code == 403
+
+    with pytest.raises(ApiError) as update_exc:
+        await dashboard.update_sms_gateway(7, body, user=admin)
+    assert update_exc.value.status_code == 403
+
+    with pytest.raises(ApiError) as test_exc:
+        await dashboard.test_sms_gateway_connection(7, user=admin)
+    assert test_exc.value.status_code == 403
+
+    with pytest.raises(ApiError) as send_exc:
+        await dashboard.set_gateway_auto_send(7, enabled=True, user=admin)
+    assert send_exc.value.status_code == 403
+
+
+def test_admin_gateway_projection_redacts_all_gateway_endpoint_secrets():
+    row = {
+        "id": 7,
+        "hod_username": "hod1",
+        "owner_username": "hod1",
+        "gateway_name": "Department Gateway",
+        "gateway_mode": "local",
+        "device_id": "secret-device",
+        "local_url": "https://gateway.internal.example/api",
+        "username": "api-user",
+        "password": "ciphertext-password",
+        "modem_port": "/dev/ttyUSB0",
+        "modem_baud": "115200",
+        "sim_number": 2,
+        "active": 1,
+        "auto_send": 1,
+        "owner_name": "HOD One",
+        "owner_role": "HOD",
+        "owner_department": "CSD",
+        "hod_name": "HOD One",
+        "hod_department": "CSD",
+        "last_connection_test": None,
+    }
+    visible = dashboard._gateway_visible(row, admin_safe=True)
+    assert visible["device_id"] == ""
+    assert visible["device_id_masked"] == ""
+    assert visible["local_url"] == ""
+    assert visible["username"] == ""
+    assert visible["modem_port"] == ""
+    assert visible["modem_baud"] == ""
+    assert visible["sim_number"] is None
+    assert visible["password_set"] is True

@@ -578,35 +578,19 @@ def _recover_stale_processing():
 
 def mark_sent(sms_id, provider_message_id=None, actor="system"):
     with connect() as c:
-        row = c.execute("SELECT roll_no FROM sms_queue WHERE id=%s", (sms_id,)).fetchone()
-        c.execute("""
-            UPDATE sms_queue
-            SET status='SENT', sent_at=CURRENT_TIMESTAMP, error=NULL,
-                processing_started_at=NULL, provider_message_id=COALESCE(%s,provider_message_id)
-            WHERE id=%s AND status='PROCESSING'
-        """, (provider_message_id, sms_id))
+        row=c.execute("SELECT q.roll_no,q.hod_username,q.gateway_id,g.owner_username,aq.semester_id FROM sms_queue q LEFT JOIN sms_gateways g ON g.id=q.gateway_id LEFT JOIN attendance_sessions aq ON aq.id=q.attendance_session_id WHERE q.id=%s",(sms_id,)).fetchone()
+        c.execute("UPDATE sms_queue SET status='SENT',sent_at=CURRENT_TIMESTAMP,error=NULL,processing_started_at=NULL,provider_message_id=COALESCE(%s,provider_message_id) WHERE id=%s AND status='PROCESSING'",(provider_message_id,sms_id))
         if row:
-            audit(c, actor, "SMS_SENT", "student", row["roll_no"])
+            d=[f"roll={row['roll_no']}","count=1"]; [d.append(f"{k}={row[k]}") for k in ("hod_username","gateway_id","owner_username","semester_id") if row.get(k)]; audit(c,actor,"SMS_SENT","student","; ".join(x.replace("hod_username=","hod=").replace("gateway_id=","gateway=").replace("owner_username=","owner=").replace("semester_id=","batch=") for x in d))
 
 
 def mark_failed(sms_id, error, *, retryable=True, actor="system"):
     with connect() as c:
-        row = c.execute("SELECT roll_no,attempt_count FROM sms_queue WHERE id=%s", (sms_id,)).fetchone()
-        if not row:
-            return
-        terminal = (not retryable) or int(row.get("attempt_count") or 0) >= MAX_ATTEMPTS
-        if terminal:
-            status = "FAILED"
-            approved = 0
-        else:
-            status = "PENDING"
-            approved = 1
-        c.execute("""
-            UPDATE sms_queue
-            SET status=%s, approved=%s, error=%s, processing_started_at=NULL
-            WHERE id=%s AND status='PROCESSING'
-        """, (status, approved, str(error)[:500], sms_id))
-        audit(c, actor, "SMS_FAILED" if terminal else "SMS_RETRY_SCHEDULED", "student", f"{row['roll_no']}: {str(error)[:200]}")
+        row=c.execute("SELECT q.roll_no,q.hod_username,q.gateway_id,g.owner_username,aq.semester_id,q.attempt_count FROM sms_queue q LEFT JOIN sms_gateways g ON g.id=q.gateway_id LEFT JOIN attendance_sessions aq ON aq.id=q.attendance_session_id WHERE q.id=%s",(sms_id,)).fetchone()
+        if not row:return
+        terminal=(not retryable) or int(row.get("attempt_count") or 0)>=MAX_ATTEMPTS; status="FAILED" if terminal else "PENDING"; approved=0 if terminal else 1
+        c.execute("UPDATE sms_queue SET status=%s,approved=%s,error=%s,processing_started_at=NULL WHERE id=%s AND status='PROCESSING'",(status,approved,str(error)[:500],sms_id))
+        d=[f"roll={row['roll_no']}","count=1"]; [d.append(f"{k}={row[k]}") for k in ("hod_username","gateway_id","owner_username","semester_id") if row.get(k)]; d.append(f"error={str(error)[:200]}"); audit(c,actor,"SMS_FAILED" if terminal else "SMS_RETRY_SCHEDULED","student","; ".join(x.replace("hod_username=","hod=").replace("gateway_id=","gateway=").replace("owner_username=","owner=").replace("semester_id=","batch=") for x in d))
 
 
 def retry_failed_sms(sms_id: int, hod_username: str | None = None, actor="system"):

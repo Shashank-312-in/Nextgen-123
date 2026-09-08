@@ -7,6 +7,7 @@ import {
   getSmsApproval,
   getSmsGateways,
   getSmsLogs,
+  getSmsActivity,
   getSmsSettings,
   saveSmsSettings,
   testSmsGateway,
@@ -24,6 +25,7 @@ import {
   type SmsApprovalRow,
   type SmsGateway,
   type SmsLogRow,
+  type SmsActivityRow,
   type SmsSettings,
   type SmsBatch,
   type SmsAccessMe,
@@ -105,6 +107,7 @@ export function SmsLogPage({ user, onLoggedOut }: Props) {
   const [approvalDate, setApprovalDate] = useState(today());
   const [approvalRows, setApprovalRows] = useState<SmsApprovalRow[]>([]);
   const [logs, setLogs] = useState<SmsLogRow[]>([]);
+  const [smsActivity, setSmsActivity] = useState<SmsActivityRow[]>([]);
   const [testPhone, setTestPhone] = useState("");
   const [facultyAccess, setFacultyAccess] = useState<SmsAccessMe | null>(null);
   const [hodSmsAccess, setHodSmsAccess] = useState<FacultySmsAccessData | null>(null);
@@ -131,6 +134,14 @@ export function SmsLogPage({ user, onLoggedOut }: Props) {
     setLoading(true);
     setError(null);
     try {
+      if (isAdmin) {
+        const [gatewayData, activityData] = await Promise.all([getSmsGateways(), getSmsActivity()]);
+        setGateways(gatewayData);
+        setSmsActivity(activityData);
+        setLogs([]);
+        setBatches([]);
+        return;
+      }
       if (isFaculty) {
         const access = await getMySmsAccess();
         setFacultyAccess(access);
@@ -140,11 +151,12 @@ export function SmsLogPage({ user, onLoggedOut }: Props) {
           setLogs([]);
           return;
         }
-        const [gatewayData, logData, batchData, templateData] = await Promise.all([
-          getSmsGateways(), getSmsLogs(), getSmsBatches(), getSmsTemplates(),
+        const [gatewayData, logData, activityData, batchData, templateData] = await Promise.all([
+          getSmsGateways(), getSmsLogs(), getSmsActivity(), getSmsBatches(), getSmsTemplates(),
         ]);
         setGateways(gatewayData);
         setLogs(logData);
+        setSmsActivity(activityData);
         setBatches(batchData);
         setTemplates(templateData);
         setComposeText(templateData.GENERAL_NOTICE || "Dear Parent, {student}: {message} - VCET CSD Dept");
@@ -160,14 +172,15 @@ export function SmsLogPage({ user, onLoggedOut }: Props) {
         return;
       }
 
-      const [settingsData, gatewayData, logData, approvalData, templateData, batchData, facultyData, accessData] = await Promise.all([
-        getSmsSettings(), getSmsGateways(), getSmsLogs(), getSmsApproval(approvalDate), getSmsTemplates(), getSmsBatches(),
+      const [settingsData, gatewayData, logData, activityData, approvalData, templateData, batchData, facultyData, accessData] = await Promise.all([
+        getSmsSettings(), getSmsGateways(), getSmsLogs(), getSmsActivity(), getSmsApproval(approvalDate), getSmsTemplates(), getSmsBatches(),
         isAdmin ? getFacultyPage() : Promise.resolve(null),
         isHod ? getSmsAccessControl() : Promise.resolve(null),
       ]);
       setSettings(settingsData);
       setGateways(gatewayData);
       setLogs(logData);
+      setSmsActivity(activityData);
       setApprovalRows(approvalData);
       setTemplates(templateData);
       setComposeText(templateData[messageType] || "");
@@ -289,6 +302,10 @@ export function SmsLogPage({ user, onLoggedOut }: Props) {
     catch (err) { setError(err instanceof ApiClientError ? err.message : "Could not save SMS settings"); }
     finally { setBusy(null); }
   };
+
+  if (isAdmin) {
+    return <AdminGatewayOverview user={user} onLoggedOut={onLoggedOut} gateways={gateways} activities={smsActivity} loading={loading} error={error} onRefresh={() => void load()} onClearError={() => setError(null)} />;
+  }
 
   if (isFaculty && !loading && facultyAccess && !facultyAccess.enabled) {
     return (
@@ -461,16 +478,127 @@ export function SmsLogPage({ user, onLoggedOut }: Props) {
           <div style={actionsStyle}><button className="btn btn-primary" onClick={() => void saveOperationsSettings()} disabled={busy !== null}>{busy === "settings" ? "Saving…" : "Save settings"}</button><button className="btn btn-outline" onClick={() => void sendTest()} disabled={busy !== null || !currentGateway}>{busy === "test-sms" ? "Sending…" : "Send test SMS"}</button></div>
         </section>}
 
-        <section style={cardStyle}>
-          <div style={headerStyle}><div><div style={eyebrow}>HISTORY</div><h2 style={titleStyle}>Recent SMS activity</h2></div></div>
-          {loading ? <div style={emptyStyle}>Loading…</div> : logs.length === 0 ? <div style={emptyStyle}>No SMS activity yet.</div> : <div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", color: "var(--text)" }}><thead><tr>{["Date", "Student", "Gateway", ...(isAdmin || isHod ? ["Handler"] : []), "Status", "Error"].map((h) => <th key={h} style={thStyle}>{h}</th>)}</tr></thead><tbody>{logs.map((r) => <tr key={r.id}><td style={tdStyle}>{r.created_at}</td><td style={tdStyle}>{r.roll_no}{r.student_name ? ` — ${r.student_name}` : ""}</td><td style={tdStyle}>{r.gateway_name || "Unassigned"}</td>{(isAdmin || isHod) && <td style={tdStyle}>{r.gateway_owner_name || r.gateway_owner_username || "HOD"}</td>}<td style={tdStyle}><span style={pill(r.status === "SENT" ? "good" : r.status === "FAILED" ? "bad" : "muted")}>{r.status}</span></td><td style={{ ...tdStyle, color: "var(--muted)" }}>{r.error || "—"}</td></tr>)}</tbody></table></div>}
-        </section>
+        <SmsActivityPanel activities={smsActivity} loading={loading} />
       </div>
     </AppShell>
   );
 }
 
+
+function activityPill(status: string): "good" | "bad" | "muted" { return ["CONNECTED","SENT"].includes(status) ? "good" : ["NOT_CONNECTED","FAILED","BLOCKED"].includes(status) ? "bad" : "muted"; }
+
+function AdminGatewayOverview({ user, onLoggedOut, gateways, activities, loading, error, onRefresh, onClearError }: {
+  user: { username: string; role: string }; onLoggedOut: () => void; gateways: SmsGateway[]; activities: SmsActivityRow[];
+  loading: boolean; error: string | null; onRefresh: () => void; onClearError: () => void;
+}) {
+  const [q,setQ]=useState(""); const [dept,setDept]=useState("ALL"); const [role,setRole]=useState("ALL"); const [status,setStatus]=useState("ALL"); const [selected,setSelected]=useState<number|null>(null);
+  const departments=useMemo(()=>Array.from(new Set(gateways.map(g=>g.owner_department||g.hod_department).filter(Boolean) as string[])).sort(),[gateways]);
+  const filtered=useMemo(()=>gateways.filter(g=>{const h=`${g.owner_name||""} ${g.owner_username||""} ${g.hod_name||""} ${g.hod_username||""} ${g.gateway_name} ${g.gateway_mode}`.toLowerCase(); const r=g.is_hod_gateway?"HOD":"FACULTY"; return (!q||h.includes(q.toLowerCase()))&&(dept==="ALL"||(g.owner_department||g.hod_department)===dept)&&(role==="ALL"||r===role)&&(status==="ALL"||g.connection_status===status)}),[gateways,q,dept,role,status]);
+  const chosen=selected?gateways.find(g=>g.id===selected)||null:null;
+  return <AppShell user={user as any} activeNav="sms-log" heading="SMS Gateways" onLoggedOut={onLoggedOut}><ErrorPopup message={error} onClose={onClearError}/><div style={{display:"grid",gap:18,maxWidth:1180,margin:"0 auto"}}>
+    <section style={cardStyle}><div style={headerStyle}><div><div style={eyebrow}>SMS GATEWAYS</div><h2 style={titleStyle}>Gateway Overview / Management</h2><p style={muted}>Cross-department oversight. Details are read-only; credential material is never exposed to Admin.</p></div><button className="btn btn-outline" onClick={onRefresh} disabled={loading}>{loading?"Refreshing…":"Refresh"}</button></div>
+      <div style={{display:"grid",gridTemplateColumns:"minmax(220px,2fr) repeat(3,minmax(140px,1fr))",gap:10}}><input style={inputStyle} value={q} onChange={e=>setQ(e.target.value)} placeholder="Search owner, HOD, gateway…"/><select style={inputStyle} value={dept} onChange={e=>setDept(e.target.value)}><option value="ALL">All departments</option>{departments.map(d=><option key={d} value={d}>{d}</option>)}</select><select style={inputStyle} value={role} onChange={e=>setRole(e.target.value)}><option value="ALL">All roles</option><option value="HOD">HOD</option><option value="FACULTY">Faculty Handler</option></select><select style={inputStyle} value={status} onChange={e=>setStatus(e.target.value)}><option value="ALL">All statuses</option><option value="CONNECTED">Connected</option><option value="NOT_CONNECTED">Not connected</option><option value="NOT_TESTED">Not tested</option></select></div>
+    </section>
+    <AdminGatewayTable title="HOD GATEWAYS" rows={filtered.filter(g=>g.is_hod_gateway)} onView={setSelected}/><AdminGatewayTable title="FACULTY GATEWAY HANDLERS" rows={filtered.filter(g=>!g.is_hod_gateway)} onView={setSelected}/><SmsActivityPanel activities={activities} loading={loading}/>
+  </div>{chosen&&<div style={modalBackdrop}><div style={modalCard}><div style={headerStyle}><div><div style={eyebrow}>READ-ONLY GATEWAY DETAIL</div><h2 style={titleStyle}>{chosen.gateway_name}</h2></div><button className="btn btn-outline" onClick={()=>setSelected(null)}>Close</button></div><div style={gridStyle}><DetailItem label="Owner" value={`${chosen.owner_name||"—"} (${chosen.owner_username||"—"})`}/><DetailItem label="Role" value={chosen.is_hod_gateway?"HOD":"FACULTY GATEWAY HANDLER"}/><DetailItem label="Department" value={chosen.owner_department||chosen.hod_department||"—"}/><DetailItem label="HOD" value={`${chosen.hod_name||"—"} (${chosen.hod_username||"—"})`}/><DetailItem label="Mode" value={chosen.gateway_mode}/><DetailItem label="Connection status" value={chosen.connection_status.replace("_"," ")}/><DetailItem label="Last connection test" value={chosen.last_connection_test||"Not tested"}/><DetailItem label="SMS auto-send" value={chosen.auto_send?"Enabled":"Disabled"}/><DetailItem label="Assigned batches" value={chosen.assigned_batches?.length?chosen.assigned_batches.map(b=>`${b.code||b.name} (${b.student_count??0})`).join(", "):"—"}/></div><div style={{marginTop:16,padding:12,borderRadius:12,background:"var(--chip-bg-muted)",color:"var(--muted)",fontSize:12}}>Passwords, tokens, decrypted device IDs, modem secrets, and endpoint credentials are intentionally unavailable.</div></div></div>}</AppShell>;
+}
+
+function AdminGatewayTable({title,rows,onView}:{title:string;rows:SmsGateway[];onView:(id:number)=>void}){return <section style={cardStyle}><div style={headerStyle}><div><div style={eyebrow}>{title}</div><h2 style={titleStyle}>{rows.length} gateway{rows.length===1?"":"s"}</h2></div></div>{rows.length?<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",color:"var(--text)"}}><thead><tr>{["Owner","HOD / Department","Gateway","Mode","Status","Last Test","View"].map(h=><th key={h} style={thStyle}>{h}</th>)}</tr></thead><tbody>{rows.map(g=><tr key={g.id}><td style={tdStyle}><strong>{g.owner_name||g.owner_username}</strong><div style={muted}>{g.owner_username||"—"}</div></td><td style={tdStyle}>{g.hod_name||g.hod_username}<div style={muted}>{g.hod_department||g.owner_department||"—"}</div></td><td style={tdStyle}>{g.gateway_name}</td><td style={tdStyle}>{g.gateway_mode}</td><td style={tdStyle}><span style={pill(activityPill(g.connection_status))}>{g.connection_status.replace("_"," ")}</span></td><td style={tdStyle}>{g.last_connection_test||"—"}</td><td style={tdStyle}><button className="btn btn-sm btn-outline" onClick={()=>onView(g.id)}>View →</button></td></tr>)}</tbody></table></div>:<div style={emptyStyle}>No gateways in this group.</div>}</section>}
+
+function DetailItem({label,value}:{label:string;value:string}){return <div style={{padding:12,border:"1px solid var(--border)",borderRadius:12}}><div style={{...eyebrow,marginBottom:4}}>{label}</div><div style={{color:"var(--text)",fontWeight:700,fontSize:13}}>{value}</div></div>}
+
+function SmsActivityPanel({ activities, loading }: { activities: SmsActivityRow[]; loading: boolean }) {
+  const [search, setSearch] = useState("");
+  const [role, setRole] = useState("ALL");
+  const [action, setAction] = useState("ALL");
+  const [status, setStatus] = useState("ALL");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [page, setPage] = useState(1);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const pageSize = 25;
+
+  const actions = useMemo(() => Array.from(new Set(activities.map((a) => a.action))).sort(), [activities]);
+  const roles = useMemo(() => Array.from(new Set(activities.map((a) => a.role))).sort(), [activities]);
+  const statuses = useMemo(() => Array.from(new Set(activities.map((a) => a.status))).sort(), [activities]);
+  const filtered = useMemo(() => activities.filter((a) => {
+    const haystack = `${a.actor} ${a.role} ${a.action} ${a.gateway} ${a.batch} ${a.status} ${a.details}`.toLowerCase();
+    const day = String(a.timestamp).slice(0, 10);
+    return (!search || haystack.includes(search.toLowerCase()))
+      && (role === "ALL" || a.role === role)
+      && (action === "ALL" || a.action === action)
+      && (status === "ALL" || a.status === status)
+      && (!from || day >= from)
+      && (!to || day <= to);
+  }), [activities, search, role, action, status, from, to]);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const visible = filtered.slice((page - 1) * pageSize, page * pageSize);
+
+  useEffect(() => { setPage(1); }, [search, role, action, status, from, to]);
+
+  return (
+    <section style={cardStyle}>
+      <div style={headerStyle}>
+        <div>
+          <div style={eyebrow}>SMS ACTIVITY / HISTORY</div>
+          <h2 style={titleStyle}>Audit Log</h2>
+          <p style={muted}>Structured gateway and SMS events with filtering and pagination.</p>
+        </div>
+        <span style={pill("muted")}>{filtered.length} RECORDS</span>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(190px,2fr) repeat(3,minmax(120px,1fr)) minmax(125px,1fr) minmax(125px,1fr)", gap: 8, marginBottom: 14 }}>
+        <input style={inputStyle} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search actor, gateway, batch…" />
+        <select style={inputStyle} value={role} onChange={(e) => setRole(e.target.value)}>
+          <option value="ALL">All roles</option>
+          {roles.map((r) => <option key={r} value={r}>{r}</option>)}
+        </select>
+        <select style={inputStyle} value={action} onChange={(e) => setAction(e.target.value)}>
+          <option value="ALL">All actions</option>
+          {actions.map((a) => <option key={a} value={a}>{a}</option>)}
+        </select>
+        <select style={inputStyle} value={status} onChange={(e) => setStatus(e.target.value)}>
+          <option value="ALL">All status</option>
+          {statuses.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <input type="date" style={inputStyle} value={from} onChange={(e) => setFrom(e.target.value)} />
+        <input type="date" style={inputStyle} value={to} onChange={(e) => setTo(e.target.value)} />
+      </div>
+      {loading ? <div style={emptyStyle}>Loading activity…</div> : visible.length === 0 ? <div style={emptyStyle}>No activity matches these filters.</div> : (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", color: "var(--text)" }}>
+            <thead><tr>{["Timestamp", "Actor", "Role", "Action", "Gateway", "Batch", "SMS Count", "Status"].map((h) => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
+            <tbody>{visible.map((a) => (
+              <React.Fragment key={a.id}>
+                <tr onClick={() => setExpandedId((id) => id === a.id ? null : a.id)} style={{ cursor: "pointer" }}>
+                  <td style={tdStyle}>{a.timestamp}</td><td style={tdStyle}>{a.actor}</td><td style={tdStyle}>{a.role}</td>
+                  <td style={tdStyle}><strong>{a.action}</strong></td><td style={tdStyle}>{a.gateway}</td><td style={tdStyle}>{a.batch}</td>
+                  <td style={{ ...tdStyle, textAlign: "center" }}>{a.sms_count}</td><td style={tdStyle}><span style={pill(activityPill(a.status))}>{a.status}</span></td>
+                </tr>
+                {expandedId === a.id && <tr>
+                  <td colSpan={8} style={{ ...tdStyle, background: "var(--chip-bg-muted)" }}>
+                    <strong style={{ color: "var(--text)" }}>Activity details</strong>
+                    <div style={{ ...muted, marginTop: 6, wordBreak: "break-word" }}>{a.details || "No additional details recorded."}</div>
+                  </td>
+                </tr>}
+              </React.Fragment>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12 }}>
+        <span style={muted}>Page {page} of {pageCount}</span>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn-sm btn-outline" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>Previous</button>
+          <button className="btn btn-sm btn-outline" onClick={() => setPage((p) => Math.min(pageCount, p + 1))} disabled={page >= pageCount}>Next</button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function Field({ label, children }: { label: string; children: ReactNode }) { return <label style={fieldLabel}>{label}{children}</label>; }
+const modalBackdrop: CSSProperties = { position:"fixed", inset:0, background:"rgba(0,0,0,.45)", display:"grid", placeItems:"center", padding:20, zIndex:100 };
+const modalCard: CSSProperties = { width:"min(860px,100%)", maxHeight:"90vh", overflow:"auto", background:"var(--card-glass)", border:"1px solid var(--border)", borderRadius:18, padding:22, boxShadow:"0 30px 80px rgba(0,0,0,.25)" };
 const cardStyle: CSSProperties = { background: "var(--card-glass)", border: "1px solid var(--border)", borderRadius: 18, padding: 20, boxShadow: "0 8px 28px rgba(0,0,0,.08)" };
 const headerStyle: CSSProperties = { display: "flex", justifyContent: "space-between", gap: 18, alignItems: "flex-start", marginBottom: 18 };
 const titleStyle: CSSProperties = { margin: "3px 0 5px", color: "var(--text)", fontSize: 21 };

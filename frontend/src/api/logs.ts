@@ -69,6 +69,15 @@ export interface SmsGateway {
   active: boolean;
   auto_send?: boolean;
   updated_at: string | null;
+  is_hod_gateway?: boolean;
+  owner_name?: string | null;
+  owner_role?: string | null;
+  owner_department?: string | null;
+  hod_name?: string | null;
+  hod_department?: string | null;
+  connection_status?: string;
+  last_connection_test?: string | null;
+  assigned_batches?: Array<{ id: number; name: string; code: string; student_count: number }>;
 }
 
 export interface SmsApprovalRow {
@@ -99,6 +108,15 @@ export async function getAuditLogs(params: { actor_type?: string; activity?: str
 
 export async function getSmsLogs(): Promise<SmsLogRow[]> {
   return apiFetch<SmsLogRow[]>("/api/dashboard/sms-log", { method: "GET" });
+}
+
+export interface SmsActivityRow {
+  id: number; timestamp: string; actor: string; role: string; action: string;
+  gateway_id: number | null; gateway: string; batch: string; sms_count: number; status: string; details: string;
+}
+
+export async function getSmsActivity(limit = 500): Promise<SmsActivityRow[]> {
+  return apiFetch<SmsActivityRow[]>(`/api/dashboard/sms-activity?limit=${limit}`, { method: "GET" });
 }
 
 export async function getSmsSettings(): Promise<SmsSettings> {

@@ -14,17 +14,7 @@ def run_fix():
         c.execute("UPDATE attendance_sessions SET hod_username='Srikanthhod' WHERE faculty_username != 'admin'")
         print("Updated attendance sessions.")
 
-        # 3. Update SMS gateway for Srikanthhod with the configured cloud credentials from gateway 1
-        admin_gw = c.execute("SELECT device_id, username, password, local_url, modem_port FROM sms_gateways WHERE hod_username='admin'").fetchone()
-        if admin_gw:
-            c.execute("""
-                UPDATE sms_gateways 
-                SET device_id=%s, username=%s, password=%s, local_url=%s, modem_port=%s, active=1
-                WHERE hod_username='Srikanthhod'
-            """, (admin_gw['device_id'], admin_gw['username'], admin_gw['password'], admin_gw['local_url'], admin_gw['modem_port']))
-            print("Updated Srikanthhod SMS gateway credentials.")
-
-        # 4. Verify users
+        # 3. Verify users
         fac_users = c.execute("SELECT username, role, hod_username, department FROM users WHERE role='FACULTY'").fetchall()
         print("\nFACULTY USERS:")
         for f in fac_users:

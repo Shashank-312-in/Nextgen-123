@@ -117,7 +117,7 @@ export function navItemsFor(role: Role): NavItem[] {
       { href: "/students", icon: ICONS.students, label: "Students", key: "students" },
       { href: "/academic-calendar", icon: ICONS.calendar, label: "Academic Calendar", key: "academic-calendar" },
       { href: "/audit-log", icon: ICONS.audit, label: "Audit Log", key: "audit" },
-      { href: "/sms-log", icon: ICONS.sms, label: "SMS Log", key: "sms-log" },
+      { href: "/sms-log", icon: ICONS.sms, label: "SMS Gateways", key: "sms-log" },
       { href: "/problem-reports", icon: ICONS.reports, label: "Problem Reports", key: "problem-reports" },
     ];
   }
