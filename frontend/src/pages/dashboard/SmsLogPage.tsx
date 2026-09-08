@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { AppShell } from "../../components/AppShell";
 import { ErrorPopup } from "../../components/ErrorPopup";
 import { ToastPopup } from "../../components/ToastPopup";
@@ -568,7 +568,7 @@ function SmsActivityPanel({ activities, loading }: { activities: SmsActivityRow[
           <table style={{ width: "100%", borderCollapse: "collapse", color: "var(--text)" }}>
             <thead><tr>{["Timestamp", "Actor", "Role", "Action", "Gateway", "Batch", "SMS Count", "Status"].map((h) => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
             <tbody>{visible.map((a) => (
-              <React.Fragment key={a.id}>
+              <Fragment key={a.id}>
                 <tr onClick={() => setExpandedId((id) => id === a.id ? null : a.id)} style={{ cursor: "pointer" }}>
                   <td style={tdStyle}>{a.timestamp}</td><td style={tdStyle}>{a.actor}</td><td style={tdStyle}>{a.role}</td>
                   <td style={tdStyle}><strong>{a.action}</strong></td><td style={tdStyle}>{a.gateway}</td><td style={tdStyle}>{a.batch}</td>
@@ -580,7 +580,7 @@ function SmsActivityPanel({ activities, loading }: { activities: SmsActivityRow[
                     <div style={{ ...muted, marginTop: 6, wordBreak: "break-word" }}>{a.details || "No additional details recorded."}</div>
                   </td>
                 </tr>}
-              </React.Fragment>
+              </Fragment>
             ))}</tbody>
           </table>
         </div>
