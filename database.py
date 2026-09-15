@@ -967,6 +967,7 @@ def init_db(db_name=None):
             topic TEXT NOT NULL,
             created_by VARCHAR(64) NOT NULL,
             created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            saved_at DATETIME NULL,
             updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             UNIQUE(attendance_date,subject_id,faculty_username,session_type),
             FOREIGN KEY(semester_id) REFERENCES academic_semesters(id),
@@ -978,6 +979,8 @@ def init_db(db_name=None):
         existing_session_cols = {row["Field"] if "Field" in row else row["name"] for row in c.execute("SHOW COLUMNS FROM attendance_sessions").fetchall()}
         if "hod_username" not in existing_session_cols:
             c.execute("ALTER TABLE attendance_sessions ADD COLUMN hod_username VARCHAR(64) NULL")
+        if "saved_at" not in existing_session_cols:
+            c.execute("ALTER TABLE attendance_sessions ADD COLUMN saved_at DATETIME NULL")
 
         # Backfill ownership on users and students.
         active_hods = c.execute("SELECT username, department FROM users WHERE role='HOD' AND active=1 ORDER BY (username != 'admin') DESC, id ASC").fetchall()
@@ -1005,6 +1008,16 @@ def init_db(db_name=None):
             FOREIGN KEY(session_id) REFERENCES attendance_sessions(id) ON DELETE CASCADE,
             FOREIGN KEY(roll_no) REFERENCES students(roll_no) ON UPDATE CASCADE ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """)
+
+        # Backfill the saved marker after attendance_records exists. Sessions
+        # with records are historical saved sessions; unopened/abandoned
+        # sessions remain NULL and therefore stay invisible to saved views.
+        c.execute("""
+            UPDATE attendance_sessions a
+            SET a.saved_at = COALESCE(a.updated_at, a.created_at)
+            WHERE a.saved_at IS NULL
+              AND EXISTS (SELECT 1 FROM attendance_records r WHERE r.session_id=a.id)
         """)
 
         # SMS gateway ownership is by HOD/organizational scope, never by physical

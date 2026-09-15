@@ -44,7 +44,7 @@ def format_audit_description(row: dict) -> str:
         noun = {"user": "an account", "student": "a student record", "student_login": "a student login", "subject": "a subject", "attendance_session": "an attendance session", "sms_gateway": "an SMS gateway"}.get(entity, f"a {entity.replace('_', ' ')}")
         return f"{actor} created {noun}."
     if action == "DELETE":
-        noun = {"user": "an account", "student": "a student record", "subject": "a subject"}.get(entity, f"a {entity.replace('_', ' ')}")
+        noun = {"user": "an account", "student": "a student record", "subject": "a subject", "attendance_session": "an attendance session"}.get(entity, f"a {entity.replace('_', ' ')}")
         target = _target_name(details)
         return f"{actor} deleted {noun}{f' ({target})' if target else ''}."
     if action in {"STATUS"}:

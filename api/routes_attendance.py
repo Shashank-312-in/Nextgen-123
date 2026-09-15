@@ -41,12 +41,14 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 
 from sms_app.services.attendance_service import (
+    delete_attendance_session,
     get_or_create_session,
     list_semesters,
     list_subjects,
     load_register,
     month_register,
     save_register,
+    saved_sessions_for_user,
     session_details,
     session_is_editable,
     subject_details,
@@ -112,6 +114,8 @@ def _serialize_session(session) -> dict:
         "duration_hours":   session["duration_hours"],
         "topic":            session["topic"],
         "created_at":       session["created_at"],
+        "saved_at":         session.get("saved_at"),
+        "saved":            session.get("saved_at") is not None,
     }
 
 
@@ -434,6 +438,28 @@ async def open_session(
 # GET /api/attendance/sessions/{id} — session + roster (register screen)
 # ──────────────────────────────────────────────
 
+@router.get("/sessions/saved")
+async def saved_sessions(
+    limit: int = Query(default=30, ge=1, le=100),
+    user: CurrentUser = Depends(get_current_user),
+):
+    _require_staff(user)
+    rows = saved_sessions_for_user(role=user.role, username=user.username, limit=limit)
+    return ok({"sessions": [
+        {
+            "id": r["id"], "attendance_date": r["attendance_date"],
+            "session_type": r["session_type"], "duration_hours": r["duration_hours"],
+            "topic": r["topic"], "created_at": r["created_at"], "saved_at": r["saved_at"],
+            "saved": True, "editable": session_is_editable(r, user.role),
+            "subject_name": r["subject_name"], "subject_code": r["subject_code"],
+            "semester_code": r["semester_code"], "semester_name": r["semester_name"],
+            "faculty_name": r["faculty_name"], "faculty_username": r["faculty_username"],
+            "present_count": int(r["present_count"] or 0), "absent_count": int(r["absent_count"] or 0),
+            "total_marked": int(r["total_marked"] or 0),
+        } for r in rows
+    ]})
+
+
 @router.get("/sessions/{session_id}")
 async def get_session(
     session_id: int,
@@ -547,6 +573,21 @@ async def save(
 # ──────────────────────────────────────────────
 # GET /api/attendance/sessions/{id}/pdf
 # ──────────────────────────────────────────────
+
+@router.delete("/sessions/{session_id}")
+async def delete_session(
+    session_id: int,
+    user: CurrentUser = Depends(get_current_user),
+):
+    _require_staff(user)
+    if user.role != "ADMIN":
+        raise ApiError("Only ADMIN can delete attendance sessions", status_code=403, code="FORBIDDEN")
+    try:
+        deleted = delete_attendance_session(session_id=session_id, actor=user.username)
+    except ValueError as exc:
+        raise ApiError(str(exc), status_code=404, code="NOT_FOUND")
+    return ok({"deleted": True, "session_id": int(deleted["id"])})
+
 
 @router.get("/sessions/{session_id}/pdf")
 async def register_pdf(

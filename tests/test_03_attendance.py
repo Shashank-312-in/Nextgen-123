@@ -162,6 +162,18 @@ class TestLiveSessionFlow:
         assert "editable" in data
         assert data["present"] + data["absent"] == len(data["roster"])
 
+    def test_unsaved_session_is_excluded_from_saved_history(self, client, hod_headers, opened_session):
+        sid = opened_session["id"]
+        r = client.get("/api/attendance/sessions/saved", headers=hod_headers)
+        assert r.status_code == 200
+        ids = [row["id"] for row in r.json()["data"]["sessions"]]
+        assert sid not in ids, "an opened-but-never-saved register must not appear in saved history"
+
+    def test_delete_session_requires_admin(self, client, student_headers, opened_session):
+        r = client.delete(f"/api/attendance/sessions/{opened_session['id']}", headers=student_headers)
+        assert r.status_code == 403
+        assert r.json()["error"]["code"] == "FORBIDDEN"
+
     def test_mark_all_present_does_not_persist_to_db(self, client, hod_headers, opened_session):
         """# — PROTECT: this is the single most important attendance
         invariant per ENDPOINTS.md §2.3 and the file's own docstring:
@@ -254,4 +266,4 @@ class TestMonthlyAttendanceRegister:
         assert r.content.startswith(b"%PDF")
 
 
-
+

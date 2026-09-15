@@ -753,6 +753,12 @@ def sessions_last_n_days(days=15, on_date=None, semester_id=None, year=None, hod
             where_clauses.append("a.hod_username = %s")
             params.append(hod_username)
 
+        # Only persisted/saved sessions belong in HOD summaries. Opening the
+        # register creates a session shell; attendance_records are written
+        # only when Save is confirmed. saved_at is the durable commit marker,
+        # so an abandoned shell cannot masquerade as a real class.
+        where_clauses.append("a.saved_at IS NOT NULL")
+
         where_clause = "WHERE " + " AND ".join(where_clauses)
         rows = c.execute(f"""
             SELECT a.id, a.attendance_date, a.session_type, a.duration_hours, a.topic, a.created_at,
@@ -773,6 +779,81 @@ def sessions_last_n_days(days=15, on_date=None, semester_id=None, year=None, hod
     for r in rows:
         grouped.setdefault(r["attendance_date"], []).append(r)
     return grouped
+
+
+def saved_sessions_for_user(*, role, username, limit=30):
+    """Return recent committed attendance sessions visible to the caller.
+
+    FACULTY sees only their own saved sessions; HOD sees sessions in their
+    scope; ADMIN sees all saved sessions. Abandoned register shells are
+    intentionally excluded in SQL via saved_at.
+    """
+    with connect() as c:
+        where = ["a.saved_at IS NOT NULL"]
+        params = []
+        if role == "FACULTY":
+            where.append("a.faculty_username=%s")
+            params.append(username)
+        elif role == "HOD":
+            where.append("a.hod_username=%s")
+            params.append(username)
+
+        params.append(max(1, min(int(limit), 100)))
+        rows = c.execute(f"""
+            SELECT a.id, a.attendance_date, a.session_type, a.duration_hours,
+                   a.topic, a.created_at, a.saved_at, a.faculty_username,
+                   s.name AS subject_name, s.code AS subject_code,
+                   sem.code AS semester_code, sem.name AS semester_name,
+                   u.full_name AS faculty_name,
+                   (SELECT COUNT(*) FROM attendance_records r WHERE r.session_id=a.id AND r.status='Present') AS present_count,
+                   (SELECT COUNT(*) FROM attendance_records r WHERE r.session_id=a.id AND r.status='Absent') AS absent_count,
+                   (SELECT COUNT(*) FROM attendance_records r WHERE r.session_id=a.id) AS total_marked
+            FROM attendance_sessions a
+            JOIN subjects s ON s.id=a.subject_id
+            JOIN academic_semesters sem ON sem.id=a.semester_id
+            LEFT JOIN users u ON u.username=a.faculty_username
+            WHERE {' AND '.join(where)}
+            ORDER BY a.attendance_date DESC, a.saved_at DESC, a.id DESC
+            LIMIT %s
+        """, params).fetchall()
+    return rows
+
+
+def delete_attendance_session(*, session_id, actor):
+    """Hard-delete a session and its records, retaining a useful audit trail."""
+    with connect() as c:
+        session = c.execute("""
+            SELECT a.id, a.attendance_date, a.faculty_username, a.session_type,
+                   s.code AS subject_code, s.name AS subject_name,
+                   SUM(CASE WHEN r.status='Present' THEN 1 ELSE 0 END) AS present_count,
+                   SUM(CASE WHEN r.status='Absent' THEN 1 ELSE 0 END) AS absent_count
+            FROM attendance_sessions a
+            JOIN subjects s ON s.id=a.subject_id
+            LEFT JOIN attendance_records r ON r.session_id=a.id
+            WHERE a.id=%s
+            GROUP BY a.id, a.attendance_date, a.faculty_username, a.session_type, s.code, s.name
+        """, (session_id,)).fetchone()
+        if not session:
+            raise ValueError("Attendance session was not found")
+
+        present = int(session.get("present_count") or 0)
+        absent = int(session.get("absent_count") or 0)
+        details = (
+            f"session={session_id}; subject={session['subject_code']} - {session['subject_name']}; "
+            f"date={session['attendance_date']}; faculty={session['faculty_username']}; "
+            f"present={present}; absent={absent}"
+        )
+        # Hard-delete dependent operational rows first because SMS queue /
+        # trigger tables intentionally use restrictive foreign keys. The
+        # session itself and attendance_records are still the authoritative
+        # attendance data being removed; the audit entry is the only trace
+        # deliberately retained for the deleted session.
+        c.execute("DELETE FROM sms_queue WHERE attendance_session_id=%s", (session_id,))
+        c.execute("DELETE FROM sms_absentee_triggers WHERE session_id=%s", (session_id,))
+        c.execute("DELETE FROM attendance_records WHERE session_id=%s", (session_id,))
+        c.execute("DELETE FROM attendance_sessions WHERE id=%s", (session_id,))
+        audit(c, actor, "DELETE", "attendance_session", details)
+        return dict(session)
 
 
 def absent_students_for_session(session_id):
@@ -907,8 +988,11 @@ def save_register(*, session_id, attendance, actor, role, session_type, duration
     if normalized_type != session["session_type"]:
         raise ValueError("Session type changed. Reopen the attendance setup before saving")
     with connect() as c:
-        c.execute("UPDATE attendance_sessions SET duration_hours=%s,topic=%s,updated_at=CURRENT_TIMESTAMP WHERE id=%s",
-                  (normalized_hours, normalized_topic, session_id))
+        c.execute("""
+            UPDATE attendance_sessions
+            SET duration_hours=%s, topic=%s, saved_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP
+            WHERE id=%s
+        """, (normalized_hours, normalized_topic, session_id))
         for roll_no, is_present in attendance.items():
             status = "Present" if is_present else "Absent"
             c.execute("""

@@ -11,6 +11,7 @@ import { HodDashboard } from "./pages/dashboard/HodDashboard";
 import { StudentDashboard } from "./pages/dashboard/StudentDashboard";
 import { AttendanceSetupPage } from "./pages/attendance/AttendanceSetupPage";
 import { AttendanceRegisterPage } from "./pages/attendance/AttendanceRegisterPage";
+import { AttendanceInsightsPage } from "./pages/attendance/AttendanceInsightsPage";
 import { StudentsListPage } from "./pages/students/StudentsListPage";
 import { StudentFormPage } from "./pages/students/StudentFormPage";
 import { StudentViewPage } from "./pages/students/StudentViewPage";
@@ -105,6 +106,14 @@ export function App() {
         element={
           <Guard user={user} reload={reload} condition={user?.role !== "STUDENT"} fallback="/">
             <AttendanceSetupPage user={user!} onLoggedOut={handleLoggedOut} />
+          </Guard>
+        }
+      />
+      <Route
+        path="/attendance/insights"
+        element={
+          <Guard user={user} reload={reload} condition={user?.role !== "STUDENT"} fallback="/">
+            <AttendanceInsightsPage user={user!} onLoggedOut={handleLoggedOut} />
           </Guard>
         }
       />

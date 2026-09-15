@@ -38,6 +38,8 @@ export interface AttendanceSession {
   duration_hours: number;
   topic: string;
   created_at: string;
+  saved_at?: string | null;
+  saved?: boolean;
 }
 
 export interface RosterEntry {
@@ -84,6 +86,9 @@ export interface SaveRegisterData {
   present: number;
   absent: number;
   sms_queued?: number;
+  sms_blocked?: number;
+  sms_duplicate?: number;
+  sms_cap_blocked?: number;
 }
 
 export interface OpenSessionBody {
@@ -131,6 +136,26 @@ export async function saveRegister(
   return apiFetch<SaveRegisterData>(`/api/attendance/sessions/${sessionId}/save`, {
     method: "POST",
     body: { present_roll_nos: presentRollNos },
+  });
+}
+
+
+export interface SavedAttendanceSession extends AttendanceSession {
+  saved_at: string | null;
+  saved: true;
+  editable: boolean;
+  present_count: number;
+  absent_count: number;
+  total_marked: number;
+}
+
+export async function getSavedSessions(limit = 30): Promise<{ sessions: SavedAttendanceSession[] }> {
+  return apiFetch<{ sessions: SavedAttendanceSession[] }>(`/api/attendance/sessions/saved?limit=${limit}`);
+}
+
+export async function deleteAttendanceSession(sessionId: number): Promise<{ deleted: boolean; session_id: number }> {
+  return apiFetch<{ deleted: boolean; session_id: number }>(`/api/attendance/sessions/${sessionId}`, {
+    method: "DELETE",
   });
 }
 
