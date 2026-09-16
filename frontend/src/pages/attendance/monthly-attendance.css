@@ -341,3 +341,21 @@
   }
   .monthly-field label{font-size:8px}
 }
+
+/* ================================================================
+   EXPORT ACTION REFINEMENT
+   Keep secondary export out of the page-title hierarchy. It belongs
+   with the register controls and stays compact on mobile.
+   ================================================================ */
+.monthly-register-toolbar-actions{display:flex;align-items:center;gap:8px;min-width:0}
+.monthly-export-context{height:34px;padding:0 10px;border-radius:8px;font-size:11px}
+
+@media (max-width:700px){
+  .monthly-register-toolbar-actions{width:100%}
+  .monthly-register-toolbar .monthly-export-context{display:none}
+  .mobile-month-strip{gap:8px}
+  .mobile-month-strip>div:nth-child(2){flex:1;min-width:0}
+  .mobile-month-actions{display:flex;align-items:center;gap:5px;flex-shrink:0}
+  .mobile-month-actions button{width:32px;height:32px}
+  .mobile-month-actions .mobile-month-export{width:auto;min-width:40px;padding:0 7px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-size:9px;font-weight:850}
+}

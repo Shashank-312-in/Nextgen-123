@@ -220,16 +220,6 @@ export function MonthlyAttendancePage({ user, onLoggedOut }: MonthlyAttendancePa
               <p className="monthly-heading-desktop-copy">Review a subject month at a time. Select a date to inspect the class session without leaving the register.</p>
             </div>
           </div>
-          {register && (
-            <a
-              className="monthly-export"
-              href={monthlyRegisterPdfUrl({ semesterId: register.semester.id, subjectId: register.subject.id, year: register.year, month: register.month })}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <span aria-hidden="true">↓</span> Export PDF
-            </a>
-          )}
         </div>
 
         <section className="monthly-controls" aria-label="Register controls">
@@ -289,10 +279,21 @@ export function MonthlyAttendancePage({ user, onLoggedOut }: MonthlyAttendancePa
                     <h2>Student register</h2>
                     <p>{register.roster.length} students · {register.days.length} calendar days</p>
                   </div>
-                  <label className="monthly-search">
-                    <span aria-hidden="true">⌕</span>
-                    <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search student or roll no." aria-label="Search student or roll number" />
-                  </label>
+                  <div className="monthly-register-toolbar-actions">
+                    <label className="monthly-search">
+                      <span aria-hidden="true">⌕</span>
+                      <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search student or roll no." aria-label="Search student or roll number" />
+                    </label>
+                    <a
+                      className="monthly-export monthly-export-context"
+                      href={monthlyRegisterPdfUrl({ semesterId: register.semester.id, subjectId: register.subject.id, year: register.year, month: register.month })}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label="Export monthly attendance as PDF"
+                    >
+                      <span aria-hidden="true">↓</span> Export PDF
+                    </a>
+                  </div>
                 </div>
 
                 <div className="monthly-grid-wrap">
@@ -434,7 +435,12 @@ export function MonthlyAttendancePage({ user, onLoggedOut }: MonthlyAttendancePa
               <div className="mobile-month-strip">
                 <button type="button" onClick={() => changeMonth(-1)} aria-label="Previous month">‹</button>
                 <div><span>Attendance calendar</span><strong>{MONTHS[month - 1]} {year}</strong><small>{register.stats?.total_sessions ?? 0} sessions</small></div>
-                <button type="button" onClick={() => changeMonth(1)} aria-label="Next month">›</button>
+                <div className="mobile-month-actions">
+                  <button type="button" className="mobile-month-export" onClick={() => window.open(monthlyRegisterPdfUrl({ semesterId: register.semester.id, subjectId: register.subject.id, year: register.year, month: register.month }), "_blank", "noopener,noreferrer")} aria-label="Export monthly attendance as PDF">
+                    <span aria-hidden="true">↓</span><span>PDF</span>
+                  </button>
+                  <button type="button" onClick={() => changeMonth(1)} aria-label="Next month">›</button>
+                </div>
               </div>
 
               <div className="mobile-weekdays" aria-hidden="true">

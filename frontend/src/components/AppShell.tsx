@@ -27,7 +27,6 @@ export function AppShell({ user, activeNav, heading, whoami, onLoggedOut, childr
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [smsGatewayAccess, setSmsGatewayAccess] = useState(user.role !== "FACULTY");
-  const mobileMenuButtonRef = useRef<HTMLButtonElement | null>(null);
   const mobileCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const mobileNavItemRefs = useRef<Record<string, HTMLAnchorElement | null>>({});
   const restoreFocusRef = useRef<HTMLElement | null>(null);
@@ -131,17 +130,15 @@ export function AppShell({ user, activeNav, heading, whoami, onLoggedOut, childr
         <header className="main-top ng-topbar">
           <div className="ng-mobile-brand">
             <button
-              ref={mobileMenuButtonRef}
               type="button"
-              className="ng-mobile-menu"
+              className="ng-mobile-brand-action"
               onClick={openMobileNav}
               aria-label="Open navigation"
               aria-expanded={mobileNavOpen}
               aria-controls="mobile-navigation-sheet"
             >
-              <span aria-hidden="true">☰</span>
+              <img src="/logo.png" alt="NextGen SMS" />
             </button>
-            <img src="/logo.png" alt="NextGen SMS" />
           </div>
           <div className="ng-page-heading">
             <span className="ng-section-kicker">NextGen SMS</span>
@@ -179,16 +176,16 @@ export function AppShell({ user, activeNav, heading, whoami, onLoggedOut, childr
             aria-modal="true"
             aria-labelledby="mobile-navigation-title"
           >
+            <div className="ng-sheet-handle" aria-hidden="true" />
             <div className="ng-sheet-head">
               <div>
                 <span className="ng-section-kicker">Navigation</span>
-                <h2 id="mobile-navigation-title">All destinations</h2>
+                <h2 id="mobile-navigation-title">NextGen SMS</h2>
               </div>
               <button ref={mobileCloseButtonRef} type="button" className="ng-close" onClick={closeMobileNav} aria-label="Close navigation">×</button>
             </div>
 
-            <nav className="ng-sheet-nav" aria-label="All application destinations">
-              <div className="ng-sheet-label">Application</div>
+            <nav className="ng-sheet-grid" aria-label="All application destinations">
               {items.map((item) => (
                 <Link
                   key={item.key}
@@ -199,20 +196,16 @@ export function AppShell({ user, activeNav, heading, whoami, onLoggedOut, childr
                 >
                   <span className="ng-sheet-item-icon nav-icon" dangerouslySetInnerHTML={{ __html: item.icon }} />
                   <span className="ng-sheet-item-label">{item.label}</span>
-                  {item.key === activeNav && <span className="ng-sheet-current">Current</span>}
+                  {item.key === activeNav && <span className="ng-sheet-check" aria-hidden="true">✓</span>}
                 </Link>
               ))}
+              <button type="button" className="ng-sheet-item ng-sheet-utility" onClick={() => { closeMobileNav(); setIsReportModalOpen(true); }}>
+                <span className="ng-sheet-item-label">Report a problem</span>
+              </button>
+              <button type="button" className="ng-sheet-item ng-sheet-utility danger" onClick={handleLogout}>
+                <span className="ng-sheet-item-label">Log out</span>
+              </button>
             </nav>
-
-            <div className="ng-sheet-actions">
-              <div className="ng-sheet-label">Support & account</div>
-              <button type="button" onClick={() => { closeMobileNav(); setIsReportModalOpen(true); }}>
-                Report a problem
-              </button>
-              <button type="button" className="danger" onClick={handleLogout}>
-                Log out
-              </button>
-            </div>
           </section>
         </div>
       )}

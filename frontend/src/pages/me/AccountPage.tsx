@@ -1,6 +1,7 @@
 // Group 6 — My Account page for HOD and FACULTY.
 // Mirrors webapp/routes/self_profile.py + templates/self_profile/account.html.
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { AppShell } from "../../components/AppShell";
 import { ErrorPopup } from "../../components/ErrorPopup";
 import { ToastPopup } from "../../components/ToastPopup";
@@ -10,7 +11,7 @@ import {
 } from "../../api/me";
 import { getSmsGateways, setSmsGatewayAutoSend, type SmsGateway } from "../../api/logs";
 import { ApiClientError, formatPhotoUrl } from "../../api/client";
-import { type CurrentUser } from "../../api/auth";
+import { logout, type CurrentUser } from "../../api/auth";
 
 interface Props {
   user: CurrentUser;
@@ -44,6 +45,7 @@ export function AccountPage({ user, onLoggedOut }: Props) {
   const [pwError, setPwError] = useState<string | null>(null);
   const [smsGateway, setSmsGateway] = useState<SmsGateway | null>(null);
   const [smsAutoSend, setSmsAutoSend] = useState(false);
+  const navigate = useNavigate();
   const photoRef = useRef<HTMLInputElement>(null);
 
   async function reload() {
@@ -313,6 +315,24 @@ export function AccountPage({ user, onLoggedOut }: Props) {
             </div>
           </form>
         )}
+      </div>
+
+      <div className="profile-logout-zone">
+        <button
+          type="button"
+          className="profile-logout"
+          onClick={async () => {
+            try { await logout(); } catch (err) { console.warn("Logout failed:", err); }
+            finally { onLoggedOut(); navigate("/login"); }
+          }}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M10 17l5-5-5-5" />
+            <path d="M15 12H3" />
+            <path d="M21 19V5a2 2 0 0 0-2-2h-6" />
+          </svg>
+          Log out
+        </button>
       </div>
     </AppShell>
   );

@@ -1,6 +1,7 @@
 // Group 6 — My Profile page for STUDENT.
 // Mirrors webapp/routes/student_self.py + templates/student_self/profile.html.
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { AppShell } from "../../components/AppShell";
 import { ErrorPopup } from "../../components/ErrorPopup";
 import { ToastPopup } from "../../components/ToastPopup";
@@ -9,7 +10,7 @@ import {
   type StudentSelf,
 } from "../../api/me";
 import { ApiClientError, formatPhotoUrl } from "../../api/client";
-import { type CurrentUser } from "../../api/auth";
+import { logout, type CurrentUser } from "../../api/auth";
 
 interface Props {
   user: CurrentUser;
@@ -35,6 +36,7 @@ const EDITABLE_FIELDS: Array<{ label: string; key: keyof StudentSelf; inputType?
 ];
 
 export function ProfilePage({ user, onLoggedOut }: Props) {
+  const navigate = useNavigate();
   const [student, setStudent] = useState<StudentSelf | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -449,6 +451,24 @@ export function ProfilePage({ user, onLoggedOut }: Props) {
             </div>
           </form>
         )}
+      </div>
+
+      <div className="profile-logout-zone">
+        <button
+          type="button"
+          className="profile-logout"
+          onClick={async () => {
+            try { await logout(); } catch (err) { console.warn("Logout failed:", err); }
+            finally { onLoggedOut(); navigate("/login"); }
+          }}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M10 17l5-5-5-5" />
+            <path d="M15 12H3" />
+            <path d="M21 19V5a2 2 0 0 0-2-2h-6" />
+          </svg>
+          Log out
+        </button>
       </div>
     </AppShell>
   );
