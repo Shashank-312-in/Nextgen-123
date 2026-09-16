@@ -112,7 +112,7 @@ export function navItemsFor(role: Role, options?: { smsGatewayAccess?: boolean }
   if (role === "FACULTY") {
     return [
       { href: "/me/account", icon: ICONS.profile, label: "Profile", key: "account" },
-      { href: "/attendance", icon: ICONS.attendance, label: "Mark Attendance", key: "attendance" },
+      { href: "/attendance", icon: ICONS.attendance, label: "Attendance", key: "attendance" },
       { href: "/students", icon: ICONS.students, label: "Students", key: "students" },
       { href: "/academic-calendar", icon: ICONS.calendar, label: "Academic Calendar", key: "academic-calendar" },
       { href: "/notes", icon: ICONS.notes, label: "Notes", key: "notes" },
@@ -122,8 +122,7 @@ export function navItemsFor(role: Role, options?: { smsGatewayAccess?: boolean }
   if (role === "ADMIN") {
     return [
       { href: "/me/account", icon: ICONS.profile, label: "Profile", key: "account" },
-      { href: "/attendance", icon: ICONS.attendance, label: "Mark Attendance", key: "attendance" },
-      { href: "/hod-dashboard", icon: ICONS.trending, label: "Admin Overview", key: "hod-dashboard" },
+      { href: "/hod-dashboard", icon: ICONS.trending, label: "Overview", key: "hod-dashboard" },
       { href: "/faculty", icon: ICONS.faculty, label: "Faculty", key: "faculty" },
       { href: "/subjects", icon: ICONS.subjects, label: "Subjects", key: "subjects" },
       { href: "/students", icon: ICONS.students, label: "Students", key: "students" },
@@ -137,7 +136,7 @@ export function navItemsFor(role: Role, options?: { smsGatewayAccess?: boolean }
   // HOD
   return [
     { href: "/me/account", icon: ICONS.profile, label: "Profile", key: "account" },
-    { href: "/hod-dashboard", icon: ICONS.trending, label: "HOD Overview", key: "hod-dashboard" },
+    { href: "/hod-dashboard", icon: ICONS.trending, label: "Overview", key: "hod-dashboard" },
     { href: "/faculty", icon: ICONS.faculty, label: "Faculty", key: "faculty" },
     { href: "/subjects", icon: ICONS.subjects, label: "Subjects", key: "subjects" },
     { href: "/students", icon: ICONS.students, label: "Students", key: "students" },

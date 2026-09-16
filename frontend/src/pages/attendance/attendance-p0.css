@@ -85,14 +85,56 @@
 .att-success { border:1px solid #bfe8d2; background:#f3fcf7; color:#12784d; border-radius:13px; padding:11px 13px; font-size:12px; font-weight:800; }
 
 .att-register { padding-bottom:160px; }
-.att-reg-top { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:18px; }
-.att-reg-back { border:0; background:transparent; color:#5c6877; padding:4px 0; font-size:12px; font-weight:800; cursor:pointer; }
-.att-reg-title { margin:3px 0 0; color:var(--att-ink); font-size:24px; line-height:1.1; font-weight:800; letter-spacing:-.03em; }
-.att-reg-meta { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:7px; color:#6f7b8c; font-size:12px; }
-.att-reg-badge { display:inline-flex; align-items:center; gap:5px; padding:5px 8px; border-radius:999px; background:#f3f6fa; color:#4b596a; font-weight:800; }
-.att-reg-badge.blue { background:var(--att-blue-soft); color:#165cbf; }
-.att-reg-badge.lock { background:#f0f2f5; color:#687484; }
+.att-reg-top {
+  display:grid;
+  grid-template-columns:minmax(0, 1fr) auto;
+  align-items:center;
+  gap:20px;
+  margin-bottom:18px;
+  padding:2px 0 17px;
+  border-bottom:1px solid var(--att-line);
+}
+.att-reg-context { display:flex; align-items:flex-start; gap:12px; min-width:0; }
+.att-reg-back {
+  width:36px;
+  height:36px;
+  flex:0 0 36px;
+  margin-top:1px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  border:1px solid #dfe5eb;
+  border-radius:50%;
+  background:#fff;
+  color:#596676;
+  cursor:pointer;
+  transition:background .16s ease, border-color .16s ease, color .16s ease, transform .16s ease;
+}
+.att-reg-back:hover { background:var(--att-blue-soft); border-color:#c8dced; color:var(--att-blue); transform:translateX(-1px); }
+.att-reg-heading-block { min-width:0; }
+.att-reg-subject-code { margin:0 0 2px; color:var(--att-blue); font-size:11px; line-height:1.15; font-weight:850; letter-spacing:.09em; text-transform:uppercase; }
+.att-reg-title { margin:0; color:var(--att-ink); font-size:23px; line-height:1.12; font-weight:800; letter-spacing:-.03em; }
+.att-reg-meta { display:flex; align-items:center; gap:7px; flex-wrap:wrap; margin-top:8px; color:#6f7b8c; font-size:11px; }
+.att-reg-meta-item { display:inline-flex; align-items:center; gap:5px; white-space:nowrap; font-weight:700; }
+.att-reg-meta-item svg { color:#7c8795; flex:0 0 auto; }
+.att-reg-meta-sep { color:#b1bac5; }
 .att-reg-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+.att-reg-edit-state, .att-reg-pdf {
+  min-height:38px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  border-radius:10px;
+  font-size:11px;
+  font-weight:800;
+  white-space:nowrap;
+}
+.att-reg-edit-state { padding:0 10px; }
+.att-reg-edit-state.editable { color:#1665b4; background:var(--att-blue-soft); }
+.att-reg-edit-state.locked { color:#687484; background:#f0f2f5; }
+.att-reg-pdf { min-width:58px; padding:0 11px; border:1px solid #dfe4eb; background:#fff; color:#344154; }
+.att-reg-pdf:hover { border-color:#c5cfda; background:#fbfcfd; }
 .att-secondary { min-height:40px; border:1px solid #dfe4eb; background:#fff; color:#344154; border-radius:11px; padding:0 12px; cursor:pointer; font-size:12px; font-weight:800; }
 .att-secondary:hover:not(:disabled) { border-color:#c1ccd9; background:#fbfcfd; }
 .att-secondary:disabled { opacity:.45; cursor:not-allowed; }
@@ -174,6 +216,54 @@
 .att-spinner { width:18px; height:18px; border:2px solid #dce3eb; border-top-color:var(--att-blue); border-radius:50%; margin:0 auto 10px; animation:att-spin .8s linear infinite; }
 @keyframes att-spin { to { transform:rotate(360deg); } }
 
+/* Attendance secondary destinations — kept contextual to Saved sessions. */
+.att-history-head-actions { position:relative; display:flex; align-items:center; gap:6px; flex:0 0 auto; }
+.att-context-menu-wrap { position:relative; }
+.att-context-trigger { position:relative; }
+.att-context-trigger.is-open { border-color:#9ebfe7; background:#f6faff; color:var(--att-blue); }
+.att-context-menu {
+  position:absolute;
+  top:calc(100% + 8px);
+  right:0;
+  z-index:120;
+  width:min(270px, calc(100vw - 32px));
+  padding:5px;
+  background:#fff;
+  border:1px solid #dfe5ec;
+  border-radius:12px;
+  box-shadow:0 14px 32px rgba(18,32,51,.12);
+}
+.att-context-menu button {
+  width:100%;
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  gap:3px;
+  padding:10px 11px;
+  border:0;
+  border-radius:9px;
+  background:transparent;
+  color:#2d3949;
+  text-align:left;
+  cursor:pointer;
+}
+.att-context-menu button:hover,
+.att-context-menu button:focus-visible { background:#f6f9fc; outline:none; }
+.att-context-menu-label { font-size:12px; font-weight:820; line-height:1.2; }
+.att-context-menu-hint { color:#8290a0; font-size:10px; font-weight:650; line-height:1.25; }
+.att-monthly-note {
+  margin-top:18px;
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:13px 15px;
+  background:#f8fafc;
+  border:1px solid #e8edf2;
+  border-radius:15px;
+}
+.att-monthly-note-title { color:#2c3a4e; font-size:12px; font-weight:800; }
+.att-monthly-note-copy { color:#778394; font-size:11px; margin-top:3px; line-height:1.4; }
+
 @media (max-width: 900px) {
   .att-shell-grid { grid-template-columns:1fr; }
   .att-commit-bar { left:18px; right:18px; bottom:78px; }
@@ -193,8 +283,13 @@
   .att-roster-head, .att-roster-row { grid-template-columns:100px minmax(145px,1fr) 92px; }
   .att-roster-wrap { overflow-x:auto; }
   .att-roster-head, .att-roster-row { min-width:420px; }
-  .att-reg-top { flex-direction:column; }
-  .att-reg-actions { justify-content:flex-start; }
+  .att-reg-top { grid-template-columns:1fr; gap:12px; padding-bottom:14px; }
+  .att-reg-context { gap:10px; }
+  .att-reg-back { width:34px; height:34px; flex-basis:34px; }
+  .att-reg-title { font-size:21px; }
+  .att-reg-subject-code { font-size:10px; }
+  .att-reg-meta { gap:6px; margin-top:7px; }
+  .att-reg-actions { justify-content:flex-start; padding-left:44px; gap:7px; }
   .att-commit-bar { align-items:center; padding:10px; }
   .att-commit-summary { font-size:11px; }
   .att-save { padding:0 14px; }

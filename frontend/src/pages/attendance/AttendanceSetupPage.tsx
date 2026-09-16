@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   type SemesterOption,
@@ -60,6 +60,8 @@ export function AttendanceSetupPage({ user, onLoggedOut }: AttendanceSetupPagePr
 
   const [sessions, setSessions] = useState<SavedAttendanceSession[]>([]);
   const [openMenu, setOpenMenu] = useState<number | null>(null);
+  const [secondaryMenuOpen, setSecondaryMenuOpen] = useState(false);
+  const secondaryMenuRef = useRef<HTMLDivElement | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SavedAttendanceSession | null>(null);
 
@@ -107,6 +109,28 @@ export function AttendanceSetupPage({ user, onLoggedOut }: AttendanceSetupPagePr
     if (sessionType === "LAB") setDurationHours(3);
     else if (durationHours === 3) setDurationHours(1);
   }, [sessionType]);
+
+  useEffect(() => {
+    if (!secondaryMenuOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!secondaryMenuRef.current?.contains(event.target as Node)) {
+        setSecondaryMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setSecondaryMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [secondaryMenuOpen]);
 
   async function handleSemesterChange(next: number) {
     setSemesterId(next);
@@ -169,9 +193,6 @@ export function AttendanceSetupPage({ user, onLoggedOut }: AttendanceSetupPagePr
             <h1 className="att-title">Mark Attendance</h1>
             <p className="att-subtitle">Start a register, make the marks, then confirm once. Nothing is saved until you approve it.</p>
           </div>
-          <button className="att-secondary" type="button" onClick={() => navigate("/attendance/insights")}>
-            <Icon name="external" size={15} />&nbsp; Attendance insights
-          </button>
         </div>
 
         {error && <div className="att-error">{error}</div>}
@@ -256,9 +277,50 @@ export function AttendanceSetupPage({ user, onLoggedOut }: AttendanceSetupPagePr
                 <h2 className="att-card-title">Saved sessions</h2>
                 <p className="att-card-caption">Only sessions you actually saved appear here. Abandoned opens are never listed.</p>
               </div>
-              <button className="att-icon-btn" type="button" onClick={loadHistory} title="Refresh saved sessions" disabled={loadingHistory}>
-                <span style={{ fontSize: 17, lineHeight: 1 }}>↻</span>
-              </button>
+              <div className="att-history-head-actions">
+                <button className="att-icon-btn" type="button" onClick={loadHistory} title="Refresh saved sessions" disabled={loadingHistory}>
+                  <span style={{ fontSize: 17, lineHeight: 1 }}>↻</span>
+                </button>
+                <div className="att-context-menu-wrap" ref={secondaryMenuRef}>
+                  <button
+                    className={`att-icon-btn att-context-trigger${secondaryMenuOpen ? " is-open" : ""}`}
+                    type="button"
+                    onClick={() => setSecondaryMenuOpen((open) => !open)}
+                    aria-label="Attendance secondary actions"
+                    aria-haspopup="menu"
+                    aria-expanded={secondaryMenuOpen}
+                    title="More attendance options"
+                  >
+                    <Icon name="dots" size={17} />
+                  </button>
+                  {secondaryMenuOpen && (
+                    <div className="att-context-menu" role="menu">
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setSecondaryMenuOpen(false);
+                          navigate("/attendance/insights");
+                        }}
+                      >
+                        <span className="att-context-menu-label">Attendance insights</span>
+                        <span className="att-context-menu-hint">Semester attendance overview</span>
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setSecondaryMenuOpen(false);
+                          navigate("/academic-calendar");
+                        }}
+                      >
+                        <span className="att-context-menu-label">Monthly register / Calendar</span>
+                        <span className="att-context-menu-hint">Existing calendar and academic schedule</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
             <div className="att-history-toolbar">
@@ -318,12 +380,11 @@ export function AttendanceSetupPage({ user, onLoggedOut }: AttendanceSetupPagePr
           </section>
         </div>
 
-        <div style={{ marginTop: 18, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "13px 15px", background: "#f8fafc", border: "1px solid #e8edf2", borderRadius: 15 }}>
+        <div className="att-monthly-note">
           <div>
-            <div style={{ color: "#2c3a4e", fontSize: 12, fontWeight: 800 }}>Need the monthly register?</div>
-            <div style={{ color: "#778394", fontSize: 11, marginTop: 3 }}>Open the existing subject calendar and semester summary without crowding the daily workflow.</div>
+            <div className="att-monthly-note-title">Need the monthly register?</div>
+            <div className="att-monthly-note-copy">Open the existing subject calendar and semester summary from the Saved sessions ⋮ menu.</div>
           </div>
-          <button className="att-secondary" type="button" onClick={() => navigate("/attendance/insights")}>Open insights</button>
         </div>
 
         {deleteTarget && (

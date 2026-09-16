@@ -313,3 +313,46 @@ export function studentsPdfUrl(
   const qs = params.toString() ? `?${params.toString()}` : "";
   return getAuthUrl(`/api/students/pdf${qs}`);
 }
+export interface StudentTrackRecord {
+  student: StudentRecord;
+  current_semester_id: number | null;
+  semesters: SemesterOption[];
+  attendance_by_semester: Record<string, {
+    total_classes: number;
+    present_classes: number;
+    absent_classes: number;
+    pct: number | null;
+    band: "green" | "yellow" | "red" | "muted";
+  }>;
+  results: Array<{
+    batch: {
+      id: number;
+      title: string;
+      created_at: string;
+      source_filename: string | null;
+      semester_code: string;
+      semester_name: string;
+    };
+    subjects: Array<{
+      subject_code: string;
+      subject_name: string;
+      marks: number;
+      max_marks: number;
+      internal_marks: number | null;
+      external_marks: number | null;
+      credits: number | null;
+      grade: string;
+      grade_point: string;
+      result_status: string;
+      sgpa: string;
+      percentage: string;
+    }>;
+    total_credits: number;
+    sgpa: string | null;
+    result_status: string | null;
+  }>;
+}
+
+export async function getStudentTrackRecord(id: number): Promise<StudentTrackRecord> {
+  return apiFetch<StudentTrackRecord>(`/api/students/${id}/track-record`, { method: "GET" });
+}

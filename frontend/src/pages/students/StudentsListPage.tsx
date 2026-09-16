@@ -28,6 +28,10 @@ export function StudentsListPage({ user, onLoggedOut }: StudentsListPageProps) {
   const [q, setQ] = useState("");
   const [yearFilter, setYearFilter] = useState(""); // "", "1", "2", "3", "4"
   const [semesterFilter, setSemesterFilter] = useState(""); // "", "1", "2", ...
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [sortOpen, setSortOpen] = useState(false);
+  const [sortBy, setSortBy] = useState<"roll" | "name" | "year">("roll");
   const [semesters, setSemesters] = useState<SemesterOption[]>([]);
   const [rows, setRows] = useState<StudentListRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -192,7 +196,6 @@ export function StudentsListPage({ user, onLoggedOut }: StudentsListPageProps) {
     "4": "4th Year",
   };
 
-  // Filtered and sorted strictly in natural ascending Roll Number order
   const displayedRows = useMemo(() => {
     let list = rows;
 
@@ -205,201 +208,165 @@ export function StudentsListPage({ user, onLoggedOut }: StudentsListPageProps) {
       list = list.filter((r) => r.current_semester_id === semId);
     }
 
-    return [...list].sort((a, b) =>
-      a.roll_no.localeCompare(b.roll_no, undefined, { numeric: true, sensitivity: "base" })
-    );
-  }, [rows, yearFilter, semesterFilter]);
+    return [...list].sort((a, b) => {
+      if (sortBy === "name") return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+      if (sortBy === "year") {
+        const yearA = Number((a.year_of_study || "").match(/\d+/)?.[0] || 0);
+        const yearB = Number((b.year_of_study || "").match(/\d+/)?.[0] || 0);
+        return yearA - yearB || a.roll_no.localeCompare(b.roll_no, undefined, { numeric: true, sensitivity: "base" });
+      }
+      return a.roll_no.localeCompare(b.roll_no, undefined, { numeric: true, sensitivity: "base" });
+    });
+  }, [rows, yearFilter, semesterFilter, sortBy]);
 
-  const activeSemesterObj = semesters.find((s) => s.id === Number(semesterFilter));
+  const hasActiveFilters = Boolean(yearFilter || semesterFilter);
+  const sortLabel = sortBy === "name" ? "Name order" : sortBy === "year" ? "Year order" : "Roll Number order";
 
   return (
     <AppShell user={user} activeNav="students" heading="Students" onLoggedOut={onLoggedOut}>
       {notice && <ToastPopup type="success" message={notice} onClose={() => setNotice(null)} />}
 
-      {/* ── Toolbar & Filters ── */}
-      <div
-        className="no-print"
-        style={{
-          display: "flex",
-          gap: 12,
-          alignItems: "center",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          marginBottom: 16,
-          background: "var(--bg-card)",
-          padding: 14,
-          borderRadius: 12,
-          border: "1px solid var(--border)",
-          boxShadow: "0 2px 4px rgba(0,0,0,0.02)",
-        }}
-      >
-        <form
-          onSubmit={handleSearchSubmit}
-          style={{ display: "flex", gap: 10, flex: 1, flexWrap: "wrap", minWidth: 0, alignItems: "center" }}
-        >
-          <div style={{ position: "relative", flex: 1, minWidth: 200, maxWidth: 340 }}>
-            <input
-              type="text"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search by name, roll no, email or phone…"
-              style={{
-                width: "100%",
-                height: 40,
-                padding: "0 12px 0 34px",
-                border: "1.5px solid var(--border)",
-                borderRadius: 8,
-                fontSize: 13.5,
-                fontWeight: 500,
-              }}
-            />
-            <span
-              style={{
-                position: "absolute",
-                left: 10,
-                top: "50%",
-                transform: "translateY(-50%)",
-                color: "var(--muted)",
-                pointerEvents: "none",
-                fontSize: 13,
-              }}
+      {/* ── Quiet Students controls ── */}
+      <div className="students-toolbar no-print">
+        <div className="students-toolbar-main">
+          <form className={`students-search ${searchOpen ? "is-open" : ""}`} onSubmit={handleSearchSubmit}>
+            <button
+              type="button"
+              className="students-tool-button students-search-toggle"
+              onClick={() => setSearchOpen(true)}
+              aria-label="Open student search"
             >
-              🔍
-            </span>
-          </div>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
+              <span>Search</span>
+            </button>
+            <div className="students-search-field">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
+              <input
+                type="text"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Search students…"
+                aria-label="Search students"
+                autoFocus={searchOpen}
+              />
+              <button
+                type="button"
+                className="students-search-close"
+                onClick={() => { setSearchOpen(false); setQ(""); load(""); }}
+                aria-label="Close search"
+              >
+                <span aria-hidden="true">×</span>
+              </button>
+            </div>
+          </form>
 
-          {/* Semester Filter */}
-          <select
-            value={semesterFilter}
-            onChange={(e) => setSemesterFilter(e.target.value)}
-            style={{
-              height: 40,
-              padding: "0 12px",
-              border: "1.5px solid var(--border)",
-              borderRadius: 8,
-              fontSize: 13.5,
-              fontWeight: 600,
-              minWidth: 190,
-              background: "var(--input-bg)",
-              color: "var(--text)",
-            }}
-          >
-            <option value="">Select Semester / Year</option>
-            {semesters.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.code} ({s.name})
-              </option>
-            ))}
-          </select>
-
-          {/* Year Filter */}
-          <select
-            value={yearFilter}
-            onChange={(e) => setYearFilter(e.target.value)}
-            style={{
-              height: 40,
-              padding: "0 10px",
-              border: "1.5px solid var(--border)",
-              borderRadius: 8,
-              fontSize: 13.5,
-              fontWeight: 600,
-              minWidth: 140,
-              background: "var(--input-bg)",
-              color: "var(--text)",
-            }}
-          >
-            <option value="">All Years</option>
-            <option value="1">1st Year (2026-2030)</option>
-            <option value="2">2nd Year (2025-2029)</option>
-            <option value="3">3rd Year (2024-2028)</option>
-            <option value="4">4th Year (2023-2027)</option>
-          </select>
-
-          <button type="submit" className="btn btn-outline" style={{ height: 40, fontWeight: 700, padding: "0 18px" }}>
-            Search
+          <button type="button" className={`students-tool-button ${hasActiveFilters ? "is-active" : ""}`} onClick={() => setFiltersOpen(true)}>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+            <span>Filters</span>
+            {hasActiveFilters && <span className="students-tool-dot" aria-hidden="true" />}
           </button>
 
-          {/* Print Students Option — ONLY FOR HOD AND ADMIN */}
-          {canPrint && (
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => {
-                const url = studentsPdfUrl(semesterFilter, q, yearFilter);
-                window.open(url, "_blank");
-              }}
-              style={{
-                height: 40,
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-                fontWeight: 700,
-                padding: "0 16px",
-                borderRadius: 8,
-                background: "var(--blue, #2563eb)",
-                color: "#ffffff",
-                border: "none",
-                boxShadow: "0 2px 6px rgba(37, 99, 235, 0.25)",
-                cursor: "pointer",
-              }}
-              title="Print official student list PDF for selected semester"
-            >
-              🖨️ Print Students
+          <div className="students-sort-wrap">
+            <button type="button" className={`students-tool-button ${sortOpen ? "is-active" : ""}`} onClick={() => setSortOpen((open) => !open)} aria-expanded={sortOpen}>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h9M8 18h6"/><path d="m4 7 2-2 2 2M6 5v14"/></svg>
+              <span>Sort</span>
             </button>
-          )}
-        </form>
+            {sortOpen && (
+              <>
+                <button className="students-popover-backdrop" aria-label="Close sort menu" onClick={() => setSortOpen(false)} />
+                <div className="students-sort-menu">
+                  <div className="students-menu-label">Sort students</div>
+                  {([[
+                    "roll", "Roll Number"
+                  ], ["name", "Name"], ["year", "Year"]] as const).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className={sortBy === value ? "selected" : ""}
+                      onClick={() => { setSortBy(value); setSortOpen(false); }}
+                    >
+                      <span>{label}</span>
+                      {sortBy === value && <span aria-hidden="true">✓</span>}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
 
-        {["HOD", "ADMIN"].includes(user.role) && (
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              type="button"
-              className="btn btn-outline"
-              onClick={openImportModal}
-              style={{ height: 40, fontWeight: 700, borderRadius: 8, padding: "0 16px", whiteSpace: "nowrap" }}
-              title="Bulk-create student accounts from an Excel sheet"
-            >
-              📥 Import Students
-            </button>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => navigate("/students/new")}
-              style={{ height: 40, fontWeight: 700, borderRadius: 8, padding: "0 16px", whiteSpace: "nowrap" }}
-            >
-              + Add Student
-            </button>
+        {(canPrint || ["HOD", "ADMIN"].includes(user.role)) && (
+          <div className="students-admin-actions">
+            {canPrint && (
+              <button
+                type="button"
+                className="students-admin-button"
+                onClick={() => window.open(studentsPdfUrl(semesterFilter, q, yearFilter), "_blank")}
+                title="Print official student list PDF for selected semester"
+              >
+                <span aria-hidden="true">🖨</span> Print
+              </button>
+            )}
+            { ["HOD", "ADMIN"].includes(user.role) && (
+              <>
+                <button type="button" className="students-admin-button" onClick={openImportModal} title="Bulk-create student accounts from an Excel sheet">
+                  <span aria-hidden="true">＋</span> Import
+                </button>
+                <button type="button" className="students-admin-button primary" onClick={() => navigate("/students/new")}>
+                  + Add Student
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
 
       {error && <div className="login-error no-print">{error}</div>}
 
-      {/* ── Summary Badge ── */}
-      <div
-        className="no-print"
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 10,
-          padding: "0 4px",
-        }}
-      >
-        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--muted)" }}>
-          Showing <span style={{ color: "var(--blue)" }}>{displayedRows.length}</span> students{" "}
-          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--subtext)" }}>
-            (Sorted in Roll Number Order)
-          </span>
-          {semesterFilter && activeSemesterObj && (
-            <span
-              className="chip chip-blue"
-              style={{ marginLeft: 8, fontSize: 11, padding: "2px 8px" }}
-            >
-              Semester: {activeSemesterObj.code} ({activeSemesterObj.name})
-            </span>
-          )}
-        </div>
+      <div className="students-summary no-print">
+        <span><strong>{displayedRows.length}</strong> students</span>
+        <span aria-hidden="true">·</span>
+        <span>{sortLabel}</span>
+        {hasActiveFilters && <span className="students-summary-filter">Filtered</span>}
       </div>
+
+      {filtersOpen && (
+        <div className="students-filter-sheet-backdrop no-print" onClick={() => setFiltersOpen(false)}>
+          <div className="students-filter-sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="student-filter-title">
+            <div className="students-sheet-handle" aria-hidden="true" />
+            <div className="students-sheet-head">
+              <div>
+                <span>Students</span>
+                <h2 id="student-filter-title">Filters</h2>
+              </div>
+              <button type="button" className="students-sheet-close" onClick={() => setFiltersOpen(false)} aria-label="Close filters">×</button>
+            </div>
+            <div className="students-filter-fields">
+              <label>
+                <span>Semester</span>
+                <select value={semesterFilter} onChange={(e) => setSemesterFilter(e.target.value)}>
+                  <option value="">All semesters</option>
+                  {semesters.map((s) => <option key={s.id} value={s.id}>{s.code} · {s.name}</option>)}
+                </select>
+              </label>
+              <label>
+                <span>Year</span>
+                <select value={yearFilter} onChange={(e) => setYearFilter(e.target.value)}>
+                  <option value="">All years</option>
+                  <option value="1">1st Year</option>
+                  <option value="2">2nd Year</option>
+                  <option value="3">3rd Year</option>
+                  <option value="4">4th Year</option>
+                </select>
+              </label>
+            </div>
+            <div className="students-sheet-actions">
+              <button type="button" className="students-admin-button" onClick={() => { setYearFilter(""); setSemesterFilter(""); }}>Clear</button>
+              <button type="button" className="students-admin-button primary" onClick={() => setFiltersOpen(false)}>Done</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Main Students Table (Roll Number Wise) ── */}
       <div className="table-wrap responsive-cards no-print">

@@ -332,6 +332,57 @@ async def student_edit_data(student_id: int, user: CurrentUser = Depends(get_cur
     return ok({"student": student, "semesters": semesters})
 
 
+@router.get("/{student_id}/track-record")
+async def student_track_record(student_id: int, user: CurrentUser = Depends(get_current_user)):
+    if user.role == "STUDENT":
+        raise ApiError("Access denied", 403, "FORBIDDEN")
+    with connect() as c:
+        if user.role == "ADMIN" or user.username == "admin":
+            row = c.execute("SELECT * FROM students WHERE id=? AND department='CSD'", (student_id,)).fetchone()
+        elif user.role == "HOD":
+            row = c.execute("SELECT * FROM students WHERE id=? AND department='CSD' AND (hod_username=? OR hod_username IS NULL)", (student_id, user.username)).fetchone()
+        else:
+            hod = _get_user_hod_username(user.username)
+            row = c.execute("SELECT * FROM students WHERE id=? AND department='CSD' AND (hod_username=? OR hod_username IS NULL)", (student_id, hod)).fetchone() if hod else None
+        if not row:
+            raise ApiError("Student not found", 404, "NOT_FOUND")
+        student = _serialize_full(row)
+        semester_rows = c.execute("SELECT id, code, name FROM academic_semesters ORDER BY sort_order, id").fetchall()
+        attendance_rows = c.execute("""
+            SELECT a.semester_id,
+                   COUNT(DISTINCT r.session_id) AS total_classes,
+                   SUM(CASE WHEN r.status='Present' THEN 1 ELSE 0 END) AS present_classes
+            FROM attendance_records r
+            JOIN attendance_sessions a ON a.id=r.session_id
+            WHERE r.roll_no=%s
+            GROUP BY a.semester_id
+        """, (row["roll_no"],)).fetchall()
+
+    from sms_app.services.attendance_service import attendance_pct_band
+    attendance_by_semester = {}
+    for ar in attendance_rows:
+        total = int(ar.get("total_classes") or 0)
+        present = int(ar.get("present_classes") or 0)
+        pct, band = attendance_pct_band(present, total)
+        attendance_by_semester[int(ar["semester_id"])] = {
+            "total_classes": total,
+            "present_classes": present,
+            "absent_classes": total - present,
+            "pct": pct,
+            "band": band,
+        }
+
+    from sms_app.services.learning_service import get_student_results
+    results = get_student_results(roll_no=row["roll_no"])
+    return ok({
+        "student": student,
+        "current_semester_id": row.get("current_semester_id"),
+        "semesters": [dict(s) for s in semester_rows],
+        "attendance_by_semester": attendance_by_semester,
+        "results": results.get("results", []),
+    })
+
+
 @router.get("/{student_id}")
 async def student_view(student_id: int, user: CurrentUser = Depends(get_current_user)):
     if user.role == "STUDENT":

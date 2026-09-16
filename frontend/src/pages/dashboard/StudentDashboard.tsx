@@ -176,7 +176,7 @@ export function StudentDashboard({ user, onLoggedOut }: StudentDashboardProps) {
   const whoami = `${data?.student.name || user.username}${data?.student.roll_no ? ` · ${data.student.roll_no}` : ""}`;
 
   return (
-    <AppShell user={user} activeNav="home" heading="My Attendance" whoami={whoami} onLoggedOut={onLoggedOut}>
+    <AppShell user={user} activeNav="attendance-summary" heading="My Attendance" whoami={whoami} onLoggedOut={onLoggedOut}>
       {/* 3D Stats */}
       <div className="stat-row-3d">
         <div className="stat-card-3d">

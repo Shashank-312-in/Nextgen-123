@@ -182,6 +182,11 @@ export function StudentViewPage({ user, onLoggedOut }: StudentViewPageProps) {
           <div style={{ marginTop: 10 }}>
             <span className={`chip ${r.active ? "chip-green" : "chip-muted"}`}>{r.active ? "Active" : "Inactive"}</span>
           </div>
+          {(["HOD", "ADMIN"] as string[]).includes(user.role) && (
+            <div style={{ marginTop: 12 }}>
+              <button type="button" className="track-record-btn" onClick={() => navigate(`/students/${id}/track-record`)}>View Student Track Record →</button>
+            </div>
+          )}
         </div>
 
         <div style={{ flex: 1, minWidth: 220 }}>

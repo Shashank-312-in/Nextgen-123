@@ -430,7 +430,7 @@ export function HodDashboard({ user, onLoggedOut }: HodDashboardProps) {
   const dayCount      = data ? Object.keys(data.days).length : 0;
 
   const totalStudentsMarked = totalPresent + totalAbsent;
-  const overallTurnoutPct   = totalStudentsMarked > 0 ? Math.round((totalPresent / totalStudentsMarked) * 100) : 100;
+  const overallTurnoutPct   = totalStudentsMarked > 0 ? Math.round((totalPresent / totalStudentsMarked) * 100) : null;
 
   const dayKeys = data ? Object.keys(data.days).sort((a, b) => b.localeCompare(a)) : [];
 
@@ -444,7 +444,7 @@ export function HodDashboard({ user, onLoggedOut }: HodDashboardProps) {
   }
 
   return (
-    <AppShell user={user} activeNav="home" heading="Attendance" onLoggedOut={onLoggedOut}>
+    <AppShell user={user} activeNav="hod-dashboard" heading="Attendance" onLoggedOut={onLoggedOut}>
       {/* 3D Stat Cards */}
       <div className="stat-row-3d">
         <div className="stat-card-3d">
@@ -474,8 +474,8 @@ export function HodDashboard({ user, onLoggedOut }: HodDashboardProps) {
           <div className="stat-icon-3d">📊</div>
           <div className="stat-info-3d">
             <div className="stat-title">Turnout Rate</div>
-            <div className="stat-value" style={{ color: overallTurnoutPct >= 75 ? "#10b981" : "#f59e0b" }}>
-              {loading ? "…" : `${overallTurnoutPct}%`}
+            <div className="stat-value" style={{ color: overallTurnoutPct == null ? "var(--muted)" : overallTurnoutPct >= 75 ? "#10b981" : "#f59e0b" }}>
+              {loading ? "…" : overallTurnoutPct == null ? "—" : `${overallTurnoutPct}%`}
             </div>
           </div>
         </div>
@@ -575,8 +575,9 @@ export function HodDashboard({ user, onLoggedOut }: HodDashboardProps) {
         </div>
       )}
       {!loading && !error && dayKeys.length === 0 && (
-        <div className="card card-pad empty-note">
-          No sessions recorded in this period.
+        <div className="card card-pad empty-note" style={{ textAlign: "left", padding: 24 }}>
+          <strong style={{ display: "block", color: "var(--text)", marginBottom: 5 }}>No attendance activity yet</strong>
+          <span>Once faculty save attendance sessions, department activity and turnout will appear here.</span>
         </div>
       )}
       {!loading && !error && dayKeys.map((date) => (

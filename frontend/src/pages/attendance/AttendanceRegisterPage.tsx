@@ -18,7 +18,7 @@ interface AttendanceRegisterPageProps {
   onLoggedOut: () => void;
 }
 
-type IconName = "search" | "check" | "x" | "arrow" | "bolt" | "calendar" | "clock" | "lock" | "list" | "download" | "close";
+type IconName = "search" | "check" | "x" | "arrow" | "back" | "bolt" | "calendar" | "clock" | "lock" | "list" | "download" | "close";
 
 function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
   const common = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.9, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
@@ -27,6 +27,7 @@ function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
     check: <path d="m5 12 4 4L19 6"/>,
     x: <><path d="m6 6 12 12"/><path d="m18 6-12 12"/></>,
     arrow: <><path d="M5 12h13"/><path d="m13 6 6 6-6 6"/></>,
+    back: <><path d="M19 12H5"/><path d="m11 6-6 6 6 6"/></>,
     bolt: <path d="m13 2-9 12h7l-1 8 9-13h-7z"/>,
     calendar: <><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M16 2v4M8 2v4M3 9h18"/></>,
     clock: <><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></>,
@@ -182,19 +183,35 @@ export function AttendanceRegisterPage({ user, onLoggedOut }: AttendanceRegister
     <AppShell user={user} activeNav="attendance" heading="Attendance Register" onLoggedOut={onLoggedOut}>
       <div className="att-p0 att-register">
         <div className="att-reg-top">
-          <div>
-            <button className="att-reg-back" type="button" onClick={() => navigate("/attendance")}>← Back to attendance</button>
-            <h1 className="att-reg-title">{session?.subject_code} — {session?.subject_name}</h1>
-            <div className="att-reg-meta">
-              <span className="att-reg-badge blue"><Icon name="calendar" size={12} />{session?.attendance_date}</span>
-              <span className="att-reg-badge"><Icon name="clock" size={12} />{session?.duration_hours} hour{session?.duration_hours === 1 ? "" : "s"}</span>
-              <span className="att-reg-badge">{session?.session_type === "LAB" ? "Lab" : "Regular class"}</span>
-              {session?.topic && <span className="att-reg-badge">{session.topic}</span>}
-              <span className={`att-reg-badge ${editable ? "blue" : "lock"}`}><Icon name={editable ? "check" : "lock"} size={12} />{editable ? "Editable" : "View only"}</span>
+          <div className="att-reg-context">
+            <button
+              className="att-reg-back"
+              type="button"
+              onClick={() => navigate("/attendance")}
+              aria-label="Back to attendance"
+              title="Back to attendance"
+            >
+              <Icon name="back" size={18} />
+            </button>
+            <div className="att-reg-heading-block">
+              <div className="att-reg-subject-code">{session?.subject_code}</div>
+              <h2 className="att-reg-title">{session?.subject_name}</h2>
+              <div className="att-reg-meta" aria-label="Session details">
+                <span className="att-reg-meta-item"><Icon name="calendar" size={13} />{session?.attendance_date}</span>
+                <span className="att-reg-meta-sep">·</span>
+                <span className="att-reg-meta-item"><Icon name="clock" size={13} />{session?.duration_hours} hour{session?.duration_hours === 1 ? "" : "s"}</span>
+                <span className="att-reg-meta-sep">·</span>
+                <span className="att-reg-meta-item">{session?.session_type === "LAB" ? "Lab" : "Regular class"}</span>
+                {session?.topic && <>
+                  <span className="att-reg-meta-sep">·</span>
+                  <span className="att-reg-meta-item">{session.topic}</span>
+                </>}
+              </div>
             </div>
           </div>
           <div className="att-reg-actions">
-            <a className="att-secondary" href={registerPdfUrl(sessionId)} target="_blank" rel="noreferrer"><Icon name="download" size={14} />&nbsp; PDF</a>
+            <span className={`att-reg-edit-state ${editable ? "editable" : "locked"}`}><Icon name={editable ? "check" : "lock"} size={13} />{editable ? "Editable" : "View only"}</span>
+            <a className="att-reg-pdf" href={registerPdfUrl(sessionId)} target="_blank" rel="noreferrer"><Icon name="download" size={14} /> PDF</a>
           </div>
         </div>
 
