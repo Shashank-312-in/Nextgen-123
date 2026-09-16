@@ -311,11 +311,11 @@ export function AttendanceSetupPage({ user, onLoggedOut }: AttendanceSetupPagePr
                         role="menuitem"
                         onClick={() => {
                           setSecondaryMenuOpen(false);
-                          navigate("/academic-calendar");
+                          navigate("/attendance/monthly-register");
                         }}
                       >
                         <span className="att-context-menu-label">Monthly register / Calendar</span>
-                        <span className="att-context-menu-hint">Existing calendar and academic schedule</span>
+                        <span className="att-context-menu-hint">Subject attendance across a month</span>
                       </button>
                     </div>
                   )}

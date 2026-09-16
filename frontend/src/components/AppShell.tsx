@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { type CurrentUser, logout } from "../api/auth";
 import { navItemsFor } from "../nav";
@@ -27,6 +27,10 @@ export function AppShell({ user, activeNav, heading, whoami, onLoggedOut, childr
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [smsGatewayAccess, setSmsGatewayAccess] = useState(user.role !== "FACULTY");
+  const mobileMenuButtonRef = useRef<HTMLButtonElement | null>(null);
+  const mobileCloseButtonRef = useRef<HTMLButtonElement | null>(null);
+  const mobileNavItemRefs = useRef<Record<string, HTMLAnchorElement | null>>({});
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,6 +50,44 @@ export function AppShell({ user, activeNav, heading, whoami, onLoggedOut, childr
   const items = navItemsFor(user.role, { smsGatewayAccess }).filter((item) => !item.disabled);
   const role = roleLabel(user.role);
 
+  const navItemSignature = items.map((item) => item.key).join("|");
+
+  useEffect(() => {
+    const activeItem = mobileNavItemRefs.current[activeNav];
+    if (!activeItem) return;
+    const id = window.requestAnimationFrame(() => {
+      activeItem.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [activeNav, navItemSignature]);
+
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    restoreFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const focusId = window.requestAnimationFrame(() => mobileCloseButtonRef.current?.focus());
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setMobileNavOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      window.cancelAnimationFrame(focusId);
+      window.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+      window.setTimeout(() => restoreFocusRef.current?.focus(), 0);
+    };
+  }, [mobileNavOpen]);
+
+  const closeMobileNav = () => setMobileNavOpen(false);
+  const openMobileNav = () => setMobileNavOpen(true);
+
   async function handleLogout() {
     try { await logout(); } catch (err) { console.warn("Logout failed:", err); }
     finally { onLoggedOut(); navigate("/login"); }
@@ -63,7 +105,7 @@ export function AppShell({ user, activeNav, heading, whoami, onLoggedOut, childr
         </Link>
 
         <div className="ng-nav-label">Workspace</div>
-        <nav className="nav-links ng-nav-links">
+        <nav className="nav-links ng-nav-links" aria-label="Primary navigation">
           {items.map((item) => (
             <Link key={item.key} to={item.href} className={`nav-link ng-nav-link${item.key === activeNav ? " active" : ""}`}>
               <span className="nav-icon" dangerouslySetInnerHTML={{ __html: item.icon }} />
@@ -88,7 +130,17 @@ export function AppShell({ user, activeNav, heading, whoami, onLoggedOut, childr
       <main className="main-area ng-main">
         <header className="main-top ng-topbar">
           <div className="ng-mobile-brand">
-            <button type="button" className="ng-mobile-menu" onClick={() => setMobileNavOpen(true)} aria-label="Open navigation">☰</button>
+            <button
+              ref={mobileMenuButtonRef}
+              type="button"
+              className="ng-mobile-menu"
+              onClick={openMobileNav}
+              aria-label="Open navigation"
+              aria-expanded={mobileNavOpen}
+              aria-controls="mobile-navigation-sheet"
+            >
+              <span aria-hidden="true">☰</span>
+            </button>
             <img src="/logo.png" alt="NextGen SMS" />
           </div>
           <div className="ng-page-heading">
@@ -101,40 +153,65 @@ export function AppShell({ user, activeNav, heading, whoami, onLoggedOut, childr
         <div className="main-body ng-main-body">{children}</div>
       </main>
 
-      <nav className="bottom-nav ng-mobile-nav" aria-label="Mobile navigation">
-        {items.slice(0, 4).map((item) => (
-          <Link key={item.key} to={item.href} className={`ng-mobile-nav-item${item.key === activeNav ? " active" : ""}`}>
-            <span className="nav-icon" dangerouslySetInnerHTML={{ __html: item.icon }} />
-            <span>{item.label}</span>
-          </Link>
-        ))}
-        <button type="button" className={`ng-mobile-nav-item${mobileNavOpen ? " active" : ""}`} onClick={() => setMobileNavOpen(true)}>
-          <span className="nav-icon">•••</span><span>More</span>
-        </button>
+      <nav className="bottom-nav ng-mobile-nav" aria-label="Quick navigation">
+        <div className="ng-mobile-nav-scroll" tabIndex={0}>
+          {items.map((item) => (
+            <Link
+              key={item.key}
+              ref={(node) => { mobileNavItemRefs.current[item.key] = node; }}
+              to={item.href}
+              className={`ng-mobile-nav-item${item.key === activeNav ? " active" : ""}`}
+              aria-current={item.key === activeNav ? "page" : undefined}
+            >
+              <span className="nav-icon" dangerouslySetInnerHTML={{ __html: item.icon }} />
+              <span>{item.label}</span>
+            </Link>
+          ))}
+        </div>
       </nav>
 
       {mobileNavOpen && (
-        <div className="ng-mobile-sheet-backdrop" onClick={() => setMobileNavOpen(false)}>
-          <section className="ng-mobile-sheet" onClick={(e) => e.stopPropagation()} aria-label="More navigation">
-            <div className="ng-sheet-handle" />
+        <div className="ng-mobile-sheet-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeMobileNav(); }}>
+          <section
+            id="mobile-navigation-sheet"
+            className="ng-mobile-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="mobile-navigation-title"
+          >
             <div className="ng-sheet-head">
               <div>
                 <span className="ng-section-kicker">Navigation</span>
-                <h2>NextGen SMS</h2>
+                <h2 id="mobile-navigation-title">All destinations</h2>
               </div>
-              <button type="button" className="ng-close" onClick={() => setMobileNavOpen(false)} aria-label="Close navigation">×</button>
+              <button ref={mobileCloseButtonRef} type="button" className="ng-close" onClick={closeMobileNav} aria-label="Close navigation">×</button>
             </div>
-            <div className="ng-sheet-grid">
+
+            <nav className="ng-sheet-nav" aria-label="All application destinations">
+              <div className="ng-sheet-label">Application</div>
               {items.map((item) => (
-                <Link key={item.key} to={item.href} onClick={() => setMobileNavOpen(false)} className={`ng-sheet-item${item.key === activeNav ? " active" : ""}`}>
-                  <span className="nav-icon" dangerouslySetInnerHTML={{ __html: item.icon }} />
-                  <span>{item.label}</span>
+                <Link
+                  key={item.key}
+                  to={item.href}
+                  onClick={closeMobileNav}
+                  className={`ng-sheet-item${item.key === activeNav ? " active" : ""}`}
+                  aria-current={item.key === activeNav ? "page" : undefined}
+                >
+                  <span className="ng-sheet-item-icon nav-icon" dangerouslySetInnerHTML={{ __html: item.icon }} />
+                  <span className="ng-sheet-item-label">{item.label}</span>
+                  {item.key === activeNav && <span className="ng-sheet-current">Current</span>}
                 </Link>
               ))}
-            </div>
+            </nav>
+
             <div className="ng-sheet-actions">
-              <button type="button" onClick={() => { setMobileNavOpen(false); setIsReportModalOpen(true); }}>Report a problem</button>
-              <button type="button" className="danger" onClick={handleLogout}>Log out</button>
+              <div className="ng-sheet-label">Support & account</div>
+              <button type="button" onClick={() => { closeMobileNav(); setIsReportModalOpen(true); }}>
+                Report a problem
+              </button>
+              <button type="button" className="danger" onClick={handleLogout}>
+                Log out
+              </button>
             </div>
           </section>
         </div>

@@ -1,0 +1,343 @@
+.monthly-page{max-width:1420px;margin:0 auto;padding:8px 0 48px;color:#182838}.monthly-topbar{display:flex;justify-content:space-between;gap:24px;align-items:flex-start;margin-bottom:18px}.monthly-heading{display:flex;gap:16px;min-width:0}.monthly-back{border:0;background:transparent;padding:4px 0;color:#167bb4;font-size:12px;font-weight:800;white-space:nowrap;cursor:pointer}.monthly-kicker{font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:#77889a;font-weight:850;margin-bottom:4px}.monthly-heading h1{margin:0;font-size:28px;letter-spacing:-.035em;color:#17314a}.monthly-heading p{margin:6px 0 0;color:#6f7e8d;font-size:13px;line-height:1.5;max-width:720px}.monthly-export{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border:1px solid #d5dee5;border-radius:9px;background:#fff;color:#23445e;font-size:12px;font-weight:800;white-space:nowrap;text-decoration:none}.monthly-export:hover{border-color:#b8ccd8;background:#fbfdfe}.monthly-controls{display:grid;grid-template-columns:minmax(180px,240px) minmax(260px,1fr) auto;align-items:end;gap:12px;padding:13px;border:1px solid #dfe7ed;background:#fff;border-radius:12px}.monthly-field{min-width:0}.monthly-field label{display:block;margin-bottom:5px;color:#728295;font-size:10px;font-weight:850;letter-spacing:.06em;text-transform:uppercase}.monthly-field select{width:100%;height:38px;border:1px solid #ccd8e0;border-radius:8px;background:#fff;color:#1f3346;padding:0 10px;font:inherit;font-size:12px;font-weight:700;outline:none}.monthly-field select:focus{border-color:#8fbdd7;box-shadow:0 0 0 3px rgba(14,165,233,.1)}.monthly-month-control{display:flex;align-items:center;justify-content:flex-end;gap:14px;min-width:220px}.monthly-month-label{display:flex;flex-direction:column;gap:2px;min-width:120px}.monthly-month-label span{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#728295;font-weight:850}.monthly-month-label strong{font-size:13px;color:#19334a}.monthly-month-actions{display:flex;gap:5px}.monthly-month-actions button{height:34px;min-width:34px;border:1px solid #d2dde4;border-radius:8px;background:#fff;color:#23445e;font-size:18px;line-height:1;cursor:pointer}.monthly-month-actions button:hover{background:#f7fafc;border-color:#b9cbd7}.monthly-month-actions .monthly-today{min-width:52px;font-size:11px;font-weight:800}.monthly-alert{margin-top:12px;padding:10px 12px;border:1px solid #eccdce;border-radius:9px;background:#fff7f7;color:#aa2f38;font-size:12px}.monthly-context{display:flex;justify-content:space-between;align-items:center;gap:16px;margin:14px 0 10px;padding:12px 2px}.monthly-context-main{display:flex;align-items:center;gap:12px;min-width:0}.monthly-subject-code{min-width:44px;height:36px;padding:0 8px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:#e9f6fd;color:#1476aa;font-size:10px;font-weight:900;letter-spacing:.03em}.monthly-context h2{margin:0;color:#18324a;font-size:17px;letter-spacing:-.02em}.monthly-context p{margin:3px 0 0;color:#778899;font-size:11px}.monthly-context-note{font-size:10px;color:#7b8a98;white-space:nowrap}.monthly-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#61b8df;margin-right:6px}.monthly-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid #dfe7ed;background:#fff;border-radius:11px;margin-bottom:12px;overflow:hidden}.monthly-summary>div{padding:12px 15px;border-right:1px solid #e7edf1}.monthly-summary>div:last-child{border-right:0}.monthly-summary span{display:block;color:#798897;font-size:10px;text-transform:uppercase;letter-spacing:.05em;font-weight:850}.monthly-summary strong{display:block;margin-top:3px;color:#18324a;font-size:21px;letter-spacing:-.03em}.monthly-summary .attention strong{color:#ad3842}.monthly-desktop-only{display:grid;grid-template-columns:minmax(0,1fr) 286px;gap:12px;align-items:start}.monthly-register-shell{min-width:0;border:1px solid #dfe7ed;border-radius:12px;background:#fff;overflow:hidden}.monthly-register-toolbar{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:12px 14px;border-bottom:1px solid #e6edf2}.monthly-register-toolbar h2{margin:0;color:#18324a;font-size:14px}.monthly-register-toolbar p{margin:2px 0 0;color:#81909e;font-size:10px}.monthly-search{height:34px;width:236px;display:flex;align-items:center;gap:7px;padding:0 9px;border:1px solid #d5e0e7;border-radius:8px;background:#fff}.monthly-search span{color:#82919f;font-size:18px;line-height:1}.monthly-search input{border:0;outline:0;background:transparent;min-width:0;width:100%;font:inherit;font-size:11px;color:#23384b}.monthly-grid-wrap{overflow:auto;max-height:calc(100vh - 312px);min-height:320px}.monthly-grid{border-collapse:separate;border-spacing:0;min-width:max-content;width:100%;font-size:11px}.monthly-grid th,.monthly-grid td{border-bottom:1px solid #edf1f4;border-right:1px solid #edf1f4}.monthly-grid thead th{position:sticky;top:0;z-index:4;background:#f8fafb;color:#70808f;font-size:9px;text-transform:uppercase;font-weight:900;letter-spacing:.04em;height:48px}.monthly-grid thead th:not(.monthly-student-col):not(.monthly-total-col){width:43px;min-width:43px;text-align:center}.monthly-grid thead th button{width:100%;height:48px;border:0;background:transparent;color:inherit;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer}.monthly-grid thead th button span{font-size:11px;color:#425569}.monthly-grid thead th button small{font-size:8px;color:#8a98a6}.monthly-grid thead th button.is-selected{background:#e8f5fc;color:#116f9f}.monthly-grid thead th.has-session button span{font-weight:900}.monthly-grid thead th.is-holiday,.monthly-grid td.is-holiday{background:#fbf8f0}.monthly-grid thead th.is-holiday button span,.monthly-grid thead th.is-holiday button small{color:#996f2c}.monthly-student-col{position:sticky;left:0;z-index:5;width:230px;min-width:230px;background:#fff;text-align:left}.monthly-grid thead .monthly-student-col{z-index:7;background:#f8fafb;padding:0 14px}.monthly-total-col{position:sticky;right:0;z-index:6;width:92px;min-width:92px;background:#fff;text-align:center}.monthly-grid thead .monthly-total-col{z-index:7;background:#f8fafb;padding:0 7px}.monthly-grid tbody tr.is-focused .monthly-student-col,.monthly-grid tbody tr.is-focused .monthly-total-cell{background:#f8fbfd}.monthly-student-cell{width:100%;border:0;background:transparent;text-align:left;padding:9px 14px;display:flex;flex-direction:column;gap:2px;cursor:pointer}.monthly-student-name{color:#24394d;font-size:11px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.monthly-roll{color:#84919e;font-size:9px;font-weight:650}.monthly-grid tbody td{height:43px;background:#fff;text-align:center}.monthly-grid tbody td.is-holiday{background:#fbf8f0}.monthly-grid tbody td.is-day-selected{box-shadow:inset 1px 0 0 #a6d4e9,inset -1px 0 0 #a6d4e9;background:#f5fbfe}.monthly-cell-button{width:100%;height:42px;border:0;background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer}.monthly-status{display:inline-flex}.mar-status{width:24px;height:24px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:900;line-height:1;border:1px solid transparent}.mar-status-P{background:#ecf8f2;border-color:#ccead9;color:#177d54}.mar-status-A{background:#fff0f1;border-color:#f4d0d4;color:#b53c47}.mar-status-H{background:#f8f3e9;border-color:#eadcbf;color:#8d6a2b}.mar-status-none{background:#f7f9fa;border-color:#e4e9ed;color:#8a98a4}.monthly-pct{display:inline-flex;align-items:center;justify-content:center;min-width:51px;height:24px;padding:0 6px;border-radius:7px;font-size:10px;font-weight:900}.monthly-pct.green{background:#ecf8f2;color:#177d54}.monthly-pct.yellow{background:#fff7e9;color:#9c6818}.monthly-pct.red{background:#fff0f1;color:#b53c47}.monthly-pct.muted{background:#f5f7f8;color:#85919d}.monthly-total-cell{text-align:center;background:#fff;position:sticky;right:0;z-index:3}.monthly-total-cell small{display:block;margin-top:1px;color:#8895a0;font-size:8px}.monthly-no-results{padding:28px;text-align:center;color:#7d8d9b}.monthly-day-panel{position:sticky;top:10px;border:1px solid #dfe7ed;border-radius:12px;background:#fff;min-height:240px;padding:15px}.monthly-day-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding-bottom:12px;border-bottom:1px solid #edf1f4}.monthly-day-head span{display:block;color:#7a8a98;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em}.monthly-day-head h2{margin:3px 0 0;color:#18324a;font-size:20px;letter-spacing:-.03em}.monthly-close-desktop{width:28px;height:28px;border:0;border-radius:7px;background:#f5f8fa;color:#7b8b98;font-size:18px;cursor:pointer}.monthly-detail-empty{display:flex;align-items:center;flex-direction:column;text-align:center;padding:28px 8px 12px;gap:7px}.monthly-detail-empty strong{color:#33485b;font-size:13px}.monthly-detail-empty span{max-width:220px;color:#8795a1;font-size:11px;line-height:1.45}.monthly-detail-mark{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900}.monthly-detail-mark.holiday{background:#f8f3e9;color:#8d6a2b}.monthly-detail-mark.none{background:#f5f7f8;color:#85919d}.monthly-session-summary{display:grid;grid-template-columns:1.25fr .75fr;gap:8px;margin-top:13px}.monthly-session-summary>div,.monthly-topic{border:1px solid #e5ebef;border-radius:9px;padding:9px 10px;background:#fbfcfd}.monthly-session-summary span,.monthly-topic span{display:block;color:#82909e;font-size:9px;text-transform:uppercase;letter-spacing:.05em;font-weight:850}.monthly-session-summary strong,.monthly-topic strong{display:block;margin-top:3px;color:#30475b;font-size:11px;line-height:1.3}.monthly-topic{margin-top:8px}.monthly-student-detail{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:9px;padding:10px;border-radius:9px;background:#f7fbfd;border:1px solid #dcecf3}.monthly-student-detail>div:first-child span{display:block;color:#334a5e;font-size:11px;font-weight:800}.monthly-student-detail>div:first-child small{display:block;margin-top:2px;color:#8695a1;font-size:9px}.monthly-student-day-stat{text-align:right}.monthly-student-day-stat strong{display:block;color:#1b7d55;font-size:14px}.monthly-student-day-stat span{display:block;color:#82919e;font-size:8px}.monthly-session-link{display:flex;align-items:center;justify-content:space-between;width:100%;height:35px;margin-top:10px;padding:0 11px;border:1px solid #cfe1ea;border-radius:8px;background:#fff;color:#176f99;font-size:11px;font-weight:850;cursor:pointer}.monthly-session-link:hover{background:#f5fbfe}.monthly-session-note{margin-top:10px;color:#82909c;font-size:9px;line-height:1.45}.monthly-loading{display:flex;align-items:center;gap:9px;margin-top:12px;padding:10px 12px;border:1px solid #dfe7ed;border-radius:9px;background:#fff;color:#5f7181}.monthly-loading strong{display:block;color:#31485d;font-size:11px}.monthly-loading span{display:block;margin-top:1px;color:#8a97a1;font-size:9px}.monthly-spinner{width:17px;height:17px;border:2px solid #d8e6ed;border-top-color:#61afd3;border-radius:50%;animation:monthlySpin .8s linear infinite}@keyframes monthlySpin{to{transform:rotate(360deg)}}.monthly-empty{margin-top:12px;padding:28px;border:1px dashed #ccd9e1;border-radius:12px;background:#fff;text-align:center}.monthly-empty strong{display:block;color:#334a5e;font-size:13px}.monthly-empty span{display:block;margin-top:4px;color:#82919f;font-size:11px}.monthly-mobile-only,.monthly-mobile-sheet-backdrop{display:none}
+
+@media (max-width:1000px){.monthly-desktop-only{grid-template-columns:1fr}.monthly-day-panel{display:none}.monthly-grid-wrap{max-height:62vh}.monthly-controls{grid-template-columns:1fr 1fr}.monthly-month-control{grid-column:1/-1;justify-content:space-between}.monthly-context-note{display:none}}
+@media (max-width:700px){.monthly-page{padding:4px 0 110px}.monthly-topbar{gap:8px;flex-direction:column}.monthly-heading{gap:10px}.monthly-heading h1{font-size:23px}.monthly-heading p{font-size:11px;max-width:none}.monthly-back{font-size:11px}.monthly-export{height:32px;padding:0 10px;font-size:10px;align-self:flex-start}.monthly-controls{grid-template-columns:1fr;padding:10px;border-radius:10px}.monthly-field-subject{grid-column:auto}.monthly-month-control{grid-column:auto;justify-content:space-between}.monthly-summary{grid-template-columns:1fr 1fr}.monthly-summary>div{border-right:0;border-bottom:1px solid #e7edf1}.monthly-summary>div:nth-child(odd){border-right:1px solid #e7edf1}.monthly-summary>div:nth-child(3),.monthly-summary>div:nth-child(4){border-bottom:0}.monthly-context{padding:9px 0}.monthly-context h2{font-size:14px}.monthly-context p{font-size:10px}.monthly-desktop-only{display:none}.monthly-mobile-only{display:block}.mobile-student-picker-head{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px;border:1px solid #dfe7ed;border-radius:10px;background:#fff}.mobile-student-picker-head span{display:block;color:#82909d;font-size:9px;text-transform:uppercase;font-weight:850;letter-spacing:.05em}.mobile-student-picker-head strong{display:block;margin-top:2px;color:#23394c;font-size:13px}.mobile-student-pct{display:flex!important;align-items:center;justify-content:center!important;width:auto!important;min-width:50px!important;height:25px!important;padding:0 8px;border-radius:7px!important;font-size:10px!important}.mobile-student-pct.green{background:#ecf8f2;color:#177d54}.mobile-student-pct.yellow{background:#fff7e9;color:#9c6818}.mobile-student-pct.red{background:#fff0f1;color:#b53c47}.mobile-student-pct.muted{background:#f5f7f8;color:#85919d}.monthly-search-mobile{width:100%;margin-top:8px}.mobile-student-list{display:flex;overflow:auto;gap:7px;padding:8px 0 3px;scrollbar-width:none}.mobile-student-list::-webkit-scrollbar{display:none}.mobile-student-list button{flex:0 0 150px;display:flex;justify-content:space-between;align-items:center;gap:8px;min-height:54px;padding:8px 9px;border:1px solid #dfe7ed;border-radius:9px;background:#fff;text-align:left}.mobile-student-list button.selected{border-color:#a9cedf;background:#f7fcfe}.mobile-student-list button strong{display:block;color:#2a4256;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:102px}.mobile-student-list button small{display:block;margin-top:2px;color:#8996a0;font-size:8px}.mobile-student-list button b{font-size:10px;color:#176f99}.mobile-student-overflow{flex:0 0 180px;align-self:center;color:#82909e;font-size:9px;line-height:1.35}.mobile-month-strip{display:flex;align-items:center;justify-content:space-between;margin-top:11px;padding:10px 0}.mobile-month-strip>button{width:32px;height:32px;border:1px solid #d4dee5;border-radius:8px;background:#fff;color:#29465c;font-size:18px}.mobile-month-strip div{text-align:center}.mobile-month-strip strong{display:block;color:#1e394f;font-size:13px}.mobile-month-strip span{display:block;margin-top:2px;color:#84919d;font-size:8px}.mobile-calendar{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px}.mobile-day-cell{aspect-ratio:1/1.02;border:1px solid #e1e8ed;border-radius:8px;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;padding:4px}.mobile-day-cell>span{font-size:9px;color:#72818e;font-weight:800}.mobile-day-cell .mar-status{width:23px;height:23px}.mobile-day-cell.session{border-color:#cadfe9}.mobile-day-cell.holiday{background:#fbf8f0}.mobile-day-cell.selected{border-color:#77b6d2;box-shadow:0 0 0 2px rgba(81,158,197,.11);background:#f6fcfe}.mobile-day-summary{margin-top:10px;width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;text-align:left;padding:11px 12px;border:1px solid #dfe7ed;border-radius:10px;background:#fff}.mobile-day-summary>div:first-child span{display:block;color:#7d8c99;font-size:9px;font-weight:750}.mobile-day-summary>div:first-child strong{display:block;color:#2a4256;font-size:12px;margin-top:2px}.mobile-day-summary>div:first-child small{display:block;color:#84919d;font-size:9px;margin-top:2px}.mobile-day-summary-status{display:flex;align-items:center;gap:6px;color:#81909d;font-size:8px}.monthly-mobile-sheet-backdrop{display:flex;position:fixed;inset:0;z-index:120;align-items:flex-end;background:rgba(18,35,48,.42)}.monthly-mobile-sheet{width:100%;max-height:78vh;overflow:auto;padding:9px 14px 18px;border-radius:18px 18px 0 0;background:#fff;box-shadow:0 -10px 35px rgba(19,38,53,.16)}.monthly-sheet-handle{width:42px;height:4px;background:#d8e0e5;border-radius:99px;margin:2px auto 12px}.monthly-sheet-status{display:flex;align-items:center;gap:9px;margin-top:12px;padding:9px;background:#f8fbfd;border:1px solid #e0ebf0;border-radius:9px}.monthly-sheet-status>div span{display:block;color:#6f808f;font-size:9px}.monthly-sheet-status>div strong{display:block;color:#2b4255;font-size:11px;margin-top:2px}.monthly-detail-empty{padding-bottom:18px}.monthly-loading{margin-top:9px}.monthly-empty{margin-top:10px}.monthly-context-main{gap:9px}.monthly-subject-code{min-width:40px;height:32px;font-size:9px}}
+
+@media (min-width:701px){.monthly-grid tbody tr:hover .monthly-student-col,.monthly-grid tbody tr:hover .monthly-total-cell{background:#fbfdfe}.monthly-grid tbody tr:hover td{background:#fcfdfe}.monthly-grid tbody tr:hover td.is-holiday{background:#fbf8f0}}
+
+@media (prefers-reduced-motion:reduce){.monthly-spinner{animation:none}}
+
+/* ================================================================
+   SECOND-PASS REFINEMENT — monthly attendance
+   The data/API structure stays unchanged; this layer corrects visual
+   hierarchy, mobile density, calendar semantics and nav clearance.
+   ================================================================ */
+.monthly-page{padding-bottom:56px}
+.monthly-heading-desktop-copy{display:block}
+.monthly-context-selectors{display:flex;align-items:flex-end;gap:12px;min-width:0;flex:1}
+.monthly-context-selectors-label{display:none}
+.monthly-selector-grid{display:contents}
+.monthly-context-note{font-size:10px;color:#82909d;white-space:nowrap}
+.monthly-summary{margin-bottom:14px}
+.monthly-summary .summary-average strong{color:#147da9}
+.monthly-grid thead th button small{order:0;text-transform:none;font-size:9px;font-weight:850;letter-spacing:.03em;color:#66798a}
+.monthly-grid thead th button span{order:1;font-size:12px;font-weight:900;color:#20384c}
+.monthly-grid thead th button{gap:2px}
+
+@media (min-width:701px){
+  .monthly-grid thead th:not(.monthly-student-col):not(.monthly-total-col){width:48px;min-width:48px}
+  .monthly-grid thead th button{height:56px}
+  .monthly-grid thead th{height:56px}
+  .monthly-grid tbody td{height:44px}
+  .monthly-grid-wrap{max-height:calc(100vh - 285px)}
+  .monthly-register-toolbar{padding:11px 14px}
+  .monthly-register-toolbar h2{font-size:15px}
+}
+
+@media (max-width:700px){
+  .monthly-page{padding:2px 0 calc(104px + env(safe-area-inset-bottom))}
+  .monthly-topbar{margin-bottom:8px;gap:3px}
+  .monthly-heading{align-items:flex-start;gap:9px}
+  .monthly-back{font-size:11px;padding-top:3px}
+  .monthly-kicker{font-size:9px;margin-bottom:2px}
+  .monthly-heading h1{font-size:21px;line-height:1.1}
+  .monthly-heading-desktop-copy{display:none}
+  .monthly-export{height:28px;padding:0 8px;font-size:9px;border-radius:7px;align-self:flex-start}
+
+  .monthly-controls{display:block;padding:9px;margin-bottom:7px;border-radius:10px}
+  .monthly-context-selectors{display:block}
+  .monthly-context-selectors-label{display:block;margin-bottom:6px;color:#718191;font-size:8px;text-transform:uppercase;letter-spacing:.07em;font-weight:900}
+  .monthly-selector-grid{display:grid;grid-template-columns:minmax(0, .85fr) minmax(0, 1.4fr);gap:7px}
+  .monthly-field label{margin-bottom:3px;font-size:8px}
+  .monthly-field select{height:33px;border-radius:7px;padding:0 8px;font-size:10px}
+  .monthly-month-control{display:none;margin-top:9px;grid-template-columns:1fr auto;align-items:center;gap:8px;padding-top:8px;border-top:1px solid #edf1f4}
+  .monthly-month-label{min-width:0}
+  .monthly-month-label span{display:none}
+  .monthly-month-label strong{font-size:14px}
+  .monthly-month-actions button{height:31px;min-width:31px;border-radius:7px;font-size:17px}
+  .monthly-month-actions .monthly-today{min-width:48px;font-size:10px}
+
+  .monthly-context{margin:6px 0 7px;padding:3px 1px;align-items:flex-start}
+  .monthly-context-main{gap:8px}
+  .monthly-subject-code{min-width:auto;height:auto;padding:4px 6px;border-radius:6px;font-size:8px}
+  .monthly-context h2{font-size:12px;line-height:1.25}
+  .monthly-context p{margin-top:2px;font-size:9px}
+  .monthly-context-note{display:none}
+
+  .monthly-summary{display:flex;align-items:stretch;margin-bottom:8px;border:0;background:transparent;gap:0;overflow:visible}
+  .monthly-summary>div{flex:1;min-width:0;padding:4px 7px;border-right:1px solid #e0e7ec!important;border-bottom:0!important;background:transparent}
+  .monthly-summary>div:first-child{padding-left:0}
+  .monthly-summary>div:last-child{border-right:0!important;padding-right:0}
+  .monthly-summary span{font-size:7px;letter-spacing:.04em}
+  .monthly-summary strong{font-size:15px;margin-top:2px}
+
+  .mobile-student-picker-head{margin-top:2px;padding:10px 11px;border-color:#d9e5eb;border-radius:9px;box-shadow:0 1px 0 rgba(22,53,72,.02)}
+  .mobile-student-picker-head>div:first-child{min-width:0}
+  .mobile-student-picker-head span{font-size:8px}
+  .mobile-student-picker-head strong{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
+  .mobile-student-picker-head small{display:block;margin-top:2px;color:#8896a1;font-size:8px}
+  .mobile-student-picker-actions{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0}
+  .mobile-student-pct{min-width:47px!important;height:23px!important;font-size:9px!important}
+  .mobile-change-student{border:0;background:transparent;color:#167bb4;font-size:9px;font-weight:850;padding:1px 0;cursor:pointer}
+  .mobile-student-picker-popover{display:none;margin-top:7px;padding:7px;background:#fff;border:1px solid #dfe8ed;border-radius:9px}
+  .mobile-student-picker-popover.open{display:block}
+  .monthly-search-mobile{margin-top:0;height:32px;border-radius:7px;width:100%}
+  .monthly-search-mobile input{font-size:10px}
+  .mobile-student-list{display:grid;grid-template-columns:1fr;max-height:220px;overflow:auto;padding:6px 0 0;gap:5px}
+  .mobile-student-list button{width:100%;min-height:45px;flex:0 0 auto;border-radius:7px;padding:7px 8px}
+  .mobile-student-list button strong{max-width:none;font-size:9px}
+  .mobile-student-list button small{font-size:7px}
+  .mobile-student-list button b{font-size:9px}
+  .mobile-student-overflow{padding:7px;font-size:8px}
+
+  .mobile-month-strip{margin-top:11px;padding:6px 0 8px}
+  .mobile-month-strip>button{width:30px;height:30px;border-radius:7px;font-size:17px}
+  .mobile-month-strip div span{display:block;font-size:8px;color:#758594;letter-spacing:.04em;text-transform:uppercase;font-weight:800}
+  .mobile-month-strip div strong{font-size:15px;line-height:1.15}
+  .mobile-month-strip div small{display:block;margin-top:2px;font-size:8px;color:#8a98a3}
+
+  .mobile-weekdays{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:0;padding:0 1px 4px;border-bottom:1px solid #dfe7ec}
+  .mobile-weekdays span{text-align:center;color:#5f7283;font-size:8px;font-weight:900;letter-spacing:.04em;text-transform:uppercase}
+  .mobile-weekdays span:nth-child(6),.mobile-weekdays span:nth-child(7){color:#84919c}
+
+  .mobile-calendar{grid-template-columns:repeat(7,minmax(0,1fr));gap:0;border-left:1px solid #e5ebef;border-top:1px solid #e5ebef;background:#fff}
+  .mobile-calendar-blank{min-width:0;aspect-ratio:1/1.15;border-right:1px solid #e5ebef;border-bottom:1px solid #e5ebef;background:#fbfcfd}
+  .mobile-day-cell{position:relative;min-width:0;aspect-ratio:1/1.15;border:0!important;border-right:1px solid #e5ebef!important;border-bottom:1px solid #e5ebef!important;border-radius:0;background:#fff;gap:2px;padding:3px 2px;justify-content:flex-start;box-shadow:none!important}
+  .mobile-day-cell:nth-child(7n+6),.mobile-day-cell:nth-child(7n){background:#fbfcfd}
+  .mobile-day-cell.session{background:#fcfeff}
+  .mobile-day-cell.holiday{background:#fcf8ef}
+  .mobile-day-cell.future{background:#f8fafb}
+  .mobile-day-cell.selected{background:#eef9fe;border-bottom-color:#73b8d6!important;box-shadow:inset 0 0 0 2px #74b8d5!important;z-index:2}
+  .mobile-day-number{display:block;width:100%;padding:0 2px;text-align:left;font-size:11px!important;line-height:1.1;color:#213a4d!important;font-weight:900!important}
+  .mobile-day-cell .mar-status{width:22px;height:22px;margin-top:5px;border-radius:6px;font-size:9px}
+  .mobile-day-state{display:block;min-height:9px;margin-top:auto;padding-bottom:2px;font-size:6px;line-height:1;color:#81909b;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  .mobile-day-cell.future .mar-status{opacity:.45}
+  .mobile-day-cell.future .mobile-day-number{color:#7c8a95!important}
+  .mobile-day-cell.holiday .mobile-day-state{color:#8c6e39;font-weight:800}
+  .mobile-day-cell.session .mobile-day-state{color:#5b7182;font-weight:800}
+
+  .mobile-calendar-legend{display:flex;flex-wrap:wrap;justify-content:center;gap:6px 11px;padding:8px 2px 2px;color:#788894;font-size:7px}
+  .mobile-calendar-legend span{white-space:nowrap}
+  .mobile-calendar-legend b{display:inline-flex;align-items:center;justify-content:center;min-width:13px;height:13px;margin-right:3px;border-radius:4px;background:#f2f6f8;color:#334b5d;font-size:7px}
+
+  .mobile-day-summary{margin-top:9px;padding:10px 11px;border-radius:9px}
+  .mobile-day-summary>div:first-child span{font-size:8px}
+  .mobile-day-summary>div:first-child strong{font-size:11px}
+  .mobile-day-summary>div:first-child small{font-size:8px}
+  .mobile-day-summary-status{font-size:7px}
+
+  .monthly-mobile-sheet{padding-bottom:calc(18px + env(safe-area-inset-bottom));max-height:80vh}
+}
+
+
+/* ================================================================
+   SKIM-READABILITY PASS — mobile attendance calendar
+   Stronger semantic contrast without turning the register into a
+   high-saturation dashboard.
+   ================================================================ */
+@media (max-width:700px){
+  .mobile-weekdays{
+    padding:0 1px 5px;
+    border-bottom:1px solid #cbd8e1;
+  }
+  .mobile-weekdays span{
+    color:#29455c;
+    font-size:9px;
+    line-height:1.1;
+    font-weight:950;
+    letter-spacing:.025em;
+  }
+  .mobile-weekdays span:nth-child(6),
+  .mobile-weekdays span:nth-child(7){color:#667c8d}
+
+  .mobile-calendar{
+    border-left:1px solid #c7d4de;
+    border-top:1px solid #c7d4de;
+    background:#fff;
+  }
+  .mobile-calendar-blank{
+    border-right:1px solid #d2dde5;
+    border-bottom:1px solid #d2dde5;
+    background:#f4f7f9;
+  }
+  .mobile-day-cell{
+    min-height:72px;
+    background:#ffffff;
+    border-right:1px solid #d2dde5!important;
+    border-bottom:1px solid #d2dde5!important;
+    padding:4px 3px 3px;
+    gap:2px;
+  }
+  .mobile-day-cell:nth-child(7n+6),
+  .mobile-day-cell:nth-child(7n){background:#f6f8fa}
+
+  /* Semantic cell surfaces: easy to skim before reading the symbol. */
+  .mobile-day-cell.status-P{background:#edf8f2}
+  .mobile-day-cell.status-A{background:#fff0f1}
+  .mobile-day-cell.status-H,
+  .mobile-day-cell.holiday{background:#fff6dc}
+  .mobile-day-cell.status-none{background:#fbfcfd}
+  .mobile-day-cell.future{background:#f0f3f5}
+  .mobile-day-cell.future.status-H,
+  .mobile-day-cell.future.holiday{background:#f8efd5}
+
+  .mobile-day-number{
+    padding:0 3px;
+    color:#18344a!important;
+    font-size:12px!important;
+    line-height:1.15;
+    font-weight:950!important;
+  }
+  .mobile-day-cell .mar-status{
+    width:25px;
+    height:25px;
+    margin-top:3px;
+    border-radius:7px;
+    font-size:10px;
+    border-width:1px;
+    box-shadow:0 1px 0 rgba(25,52,72,.04);
+  }
+  .mobile-day-cell.status-P .mar-status{
+    background:#d9f3e4;
+    border-color:#a9dfc2;
+    color:#0f6f48;
+  }
+  .mobile-day-cell.status-A .mar-status{
+    background:#ffdfe2;
+    border-color:#f0b1ba;
+    color:#a92f3d;
+  }
+  .mobile-day-cell.status-H .mar-status,
+  .mobile-day-cell.holiday .mar-status{
+    background:#ffe9ad;
+    border-color:#e8c86f;
+    color:#8a641d;
+  }
+  .mobile-day-cell.status-none .mar-status{
+    background:#f0f4f6;
+    border-color:#d4dfe6;
+    color:#647889;
+  }
+  .mobile-day-cell.future .mar-status{opacity:.62}
+
+  .mobile-day-state{
+    min-height:10px;
+    padding:0 2px 3px;
+    font-size:6.7px;
+    line-height:1;
+    letter-spacing:.035em;
+    color:#596f80;
+    font-weight:850;
+  }
+  .mobile-day-cell.status-P .mobile-day-state{color:#16714d}
+  .mobile-day-cell.status-A .mobile-day-state{color:#a3303d}
+  .mobile-day-cell.holiday .mobile-day-state,
+  .mobile-day-cell.status-H .mobile-day-state{color:#7c5b22}
+  .mobile-day-cell.status-none .mobile-day-state{color:#728492}
+  .mobile-day-cell.future .mobile-day-state{color:#7d8992}
+
+  .mobile-day-cell.selected{
+    background:#e1f4fc!important;
+    box-shadow:inset 0 0 0 2px #238bb8!important;
+    z-index:3;
+  }
+  .mobile-day-cell.selected .mobile-day-number{color:#0d4f70!important}
+
+  .mobile-calendar-legend{
+    gap:7px 12px;
+    padding:9px 2px 3px;
+    color:#5e7282;
+    font-size:7.5px;
+    font-weight:750;
+  }
+  .mobile-calendar-legend b{
+    min-width:15px;
+    height:15px;
+    margin-right:3px;
+    border-radius:4px;
+    background:#e9eef2;
+    color:#203b50;
+    font-size:8px;
+    font-weight:950;
+  }
+  .mobile-calendar-legend span:nth-child(1) b{background:#d9f3e4;color:#0f6f48}
+  .mobile-calendar-legend span:nth-child(2) b{background:#ffdfe2;color:#a92f3d}
+  .mobile-calendar-legend span:nth-child(3) b{background:#ffe9ad;color:#8a641d}
+  .mobile-calendar-legend span:nth-child(4) b{background:#edf1f3;color:#607687}
+}
+
+
+/* ================================================================
+   FINAL MOBILE NAV / MONTHLY HEADER POLISH
+   Keeps the attendance page quiet while making global navigation
+   and the page return affordance feel intentional.
+   ================================================================ */
+.monthly-back{
+  display:inline-flex;
+  align-items:center;
+  justify-content:flex-start;
+  gap:4px;
+  min-height:30px;
+  padding:0 8px 0 5px;
+  border:1px solid #d6e1e8;
+  border-radius:8px;
+  background:#fff;
+  color:#236783;
+  font-size:11px;
+  font-weight:850;
+  line-height:1;
+  transition:background .15s ease,border-color .15s ease,color .15s ease;
+}
+.monthly-back:hover{background:#f6fbfd;border-color:#bdd2de;color:#145c7c}
+.monthly-back:focus-visible{outline:2px solid #72b9d7;outline-offset:2px}
+.monthly-back-icon{
+  width:17px;
+  height:17px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  font-size:19px;
+  line-height:1;
+  margin-top:-1px;
+}
+
+@media (max-width:700px){
+  .monthly-topbar{
+    align-items:flex-start;
+    margin-bottom:9px;
+  }
+  .monthly-heading{
+    gap:8px;
+    align-items:flex-start;
+  }
+  .monthly-back{
+    flex:0 0 auto;
+    min-height:28px;
+    padding:0 7px 0 4px;
+    border-radius:7px;
+    font-size:10px;
+  }
+  .monthly-back-icon{width:16px;height:16px;font-size:18px}
+  .monthly-heading > div{min-width:0}
+  .monthly-kicker{font-size:8px;letter-spacing:.105em;margin-bottom:2px}
+  .monthly-heading h1{font-size:21px;line-height:1.08}
+  .monthly-export{
+    flex:0 0 auto;
+    height:28px;
+    padding:0 8px;
+    border-radius:7px;
+    font-size:9px;
+    gap:4px;
+  }
+  .monthly-controls{
+    margin-bottom:9px;
+    padding:9px;
+    border-radius:9px;
+  }
+  .monthly-context-selectors-label{
+    margin-bottom:5px;
+    font-size:8px;
+    letter-spacing:.075em;
+  }
+  .monthly-field label{font-size:8px}
+}
