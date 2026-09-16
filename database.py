@@ -882,6 +882,49 @@ def init_db(db_name=None):
         """)
 
         c.execute("""
+        CREATE TABLE IF NOT EXISTS timetables(
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            department VARCHAR(64) NOT NULL DEFAULT 'CSD',
+            hod_username VARCHAR(64) NOT NULL,
+            semester_id INT NOT NULL,
+            section_name VARCHAR(32) NOT NULL DEFAULT 'A',
+            academic_year VARCHAR(32) NOT NULL,
+            period_config_json LONGTEXT NOT NULL,
+            status VARCHAR(16) NOT NULL DEFAULT 'DRAFT' CHECK(status IN ('DRAFT','PUBLISHED')),
+            created_by VARCHAR(64) NOT NULL,
+            updated_by VARCHAR(64) NOT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            published_at DATETIME NULL,
+            FOREIGN KEY(semester_id) REFERENCES academic_semesters(id) ON DELETE CASCADE,
+            FOREIGN KEY(hod_username) REFERENCES users(username) ON UPDATE CASCADE,
+            INDEX idx_timetables_scope (department, semester_id, status),
+            INDEX idx_timetables_owner (hod_username, semester_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """)
+
+        c.execute("""
+        CREATE TABLE IF NOT EXISTS timetable_entries(
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            timetable_id INT NOT NULL,
+            day_of_week VARCHAR(3) NOT NULL,
+            section VARCHAR(16) NOT NULL,
+            start_slot INT NOT NULL,
+            duration INT NOT NULL,
+            block_type VARCHAR(32) NOT NULL DEFAULT 'THEORY',
+            subject_id INT NULL,
+            custom_label VARCHAR(255) NOT NULL DEFAULT '',
+            faculty_username VARCHAR(64) NULL,
+            room VARCHAR(128) NOT NULL DEFAULT '',
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(timetable_id) REFERENCES timetables(id) ON DELETE CASCADE,
+            FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE SET NULL,
+            FOREIGN KEY(faculty_username) REFERENCES users(username) ON UPDATE CASCADE ON DELETE SET NULL,
+            INDEX idx_timetable_entries_lookup (timetable_id, day_of_week, section, start_slot)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """)
+
+        c.execute("""
         CREATE TABLE IF NOT EXISTS notes(
             id INT AUTO_INCREMENT PRIMARY KEY,
             subject_id INT NOT NULL,

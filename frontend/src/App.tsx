@@ -20,6 +20,7 @@ import { StudentTrackRecordPage } from "./pages/students/StudentTrackRecordPage"
 import { FacultyPage } from "./pages/faculty/FacultyPage";
 import { SubjectsPage } from "./pages/subjects/SubjectsPage";
 import { AcademicCalendarPage } from "./pages/academic-calendar/AcademicCalendarPage";
+import { TimetablePage } from "./pages/timetable/TimetablePage";
 import { AccountPage } from "./pages/me/AccountPage";
 import { ProfilePage } from "./pages/me/ProfilePage";
 import { AuditLogPage } from "./pages/dashboard/AuditLogPage";
@@ -224,6 +225,16 @@ export function App() {
         element={
           <Guard user={user} reload={reload} condition={user?.role === "ADMIN"} fallback="/">
             <ResultsUploadPage user={user!} onLoggedOut={handleLoggedOut} />
+          </Guard>
+        }
+      />
+
+      {/* ── Timetable (all authenticated roles) ── */}
+      <Route
+        path="/timetable"
+        element={
+          <Guard user={user} reload={reload}>
+            <TimetablePage user={user!} onLoggedOut={handleLoggedOut} />
           </Guard>
         }
       />
