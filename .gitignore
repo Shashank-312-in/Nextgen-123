@@ -11,6 +11,7 @@ sms.db
 *.sqlite
 *.sqlite3
 
+zips/
 .pytest_cache
 
 .venv/
@@ -36,6 +37,7 @@ mysql_data/
 test_results.log
 # Database backups must never be committed or shipped with source
 backups/
+
 
 CHANGES_NOTES_RESULTS.md
 backup/*
