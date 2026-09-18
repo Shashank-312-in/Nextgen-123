@@ -924,6 +924,12 @@ def get_student_results(*, roll_no: str) -> dict:
                 (upload_batch["id"], roll_no),
             ).fetchall()
             subjects = [dict(r) for r in rows]
+            if not subjects:
+                # This upload batch belongs to the student's cohort, but no
+                # result_items row exists for this specific roll_no in it —
+                # e.g. they weren't in the sheet, or joined the batch later.
+                # Skip it rather than showing an empty "Marksheet" record.
+                continue
             total_credits = sum(float(r.get("credits") or 0) for r in subjects)
             sgpa = next((str(r.get("sgpa")) for r in subjects if r.get("sgpa") not in (None, "")), None)
             raw_statuses = [str(r.get("result_status") or "").strip() for r in subjects if str(r.get("result_status") or "").strip()]

@@ -356,3 +356,50 @@ export interface StudentTrackRecord {
 export async function getStudentTrackRecord(id: number): Promise<StudentTrackRecord> {
   return apiFetch<StudentTrackRecord>(`/api/students/${id}/track-record`, { method: "GET" });
 }
+
+export interface SemesterSubjectAttendance {
+  subject_id: number;
+  subject_code: string;
+  subject_name: string;
+  present_sessions: number;
+  total_sessions: number;
+  absent_sessions: number;
+  pct: number | null;
+  band: "green" | "yellow" | "red" | "muted";
+}
+
+export interface SemesterResultSubject {
+  subject_code: string;
+  subject_name: string;
+  marks: number;
+  max_marks: number;
+  internal_marks: number | null;
+  external_marks: number | null;
+  credits: number | null;
+  grade: string;
+  grade_point: string;
+}
+
+export interface StudentSemesterTrackRecord {
+  student: StudentRecord;
+  semester: { id: number; code: string; name: string };
+  attendance: {
+    subjects: SemesterSubjectAttendance[];
+    total_classes: number;
+    total_present: number;
+    total_absent: number;
+    overall_pct: number | null;
+    overall_band: "green" | "yellow" | "red" | "muted";
+  };
+  result: {
+    batch: { id: number; title: string; created_at: string; source_filename: string | null; semester_code: string; semester_name: string };
+    subjects: SemesterResultSubject[];
+    total_credits: number;
+    sgpa: string | null;
+    result_status: string | null;
+  } | null;
+}
+
+export async function getStudentSemesterTrackRecord(id: number, semesterId: number): Promise<StudentSemesterTrackRecord> {
+  return apiFetch<StudentSemesterTrackRecord>(`/api/students/${id}/track-record/${semesterId}`, { method: "GET" });
+}

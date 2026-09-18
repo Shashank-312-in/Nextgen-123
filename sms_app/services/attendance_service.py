@@ -902,6 +902,25 @@ def student_subject_attendance(roll_no):
         """, (roll_no,)).fetchall()
 
 
+def student_subject_attendance_for_semester(roll_no, semester_id):
+    # — Same shape as student_subject_attendance, but scoped to one semester
+    # so a student's track record can show the subject-wise breakdown that
+    # was actually taught in that term, not a lifetime total mislabeled as
+    # a single semester's numbers.
+    with connect() as c:
+        return c.execute("""
+            SELECT s.id AS subject_id, s.code AS subject_code, s.name AS subject_name,
+                   COUNT(r.id) AS total_sessions,
+                   SUM(CASE WHEN r.status='Present' THEN 1 ELSE 0 END) AS present_sessions
+            FROM attendance_records r
+            JOIN attendance_sessions a ON a.id=r.session_id
+            JOIN subjects s ON s.id=a.subject_id
+            WHERE r.roll_no=%s AND a.semester_id=%s
+            GROUP BY s.id
+            ORDER BY s.name
+        """, (roll_no, semester_id)).fetchall()
+
+
 def student_subject_session_history(roll_no, subject_id):
     # — STUDENT Home, "tapping a subject shows session history for that
     # subject only (present/absent per date)" (SPEC.md §3).

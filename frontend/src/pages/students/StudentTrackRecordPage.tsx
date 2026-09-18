@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { AppShell } from "../../components/AppShell";
 import { ErrorPopup } from "../../components/ErrorPopup";
@@ -8,14 +8,10 @@ import { getStudentTrackRecord, type StudentTrackRecord } from "../../api/studen
 
 interface Props { user: CurrentUser; onLoggedOut: () => void; }
 
-type Tab = "attendance" | "marksheet";
-
 export function StudentTrackRecordPage({ user, onLoggedOut }: Props) {
   const { studentId } = useParams<{ studentId: string }>();
   const navigate = useNavigate();
   const [data, setData] = useState<StudentTrackRecord | null>(null);
-  const [selectedSemesterId, setSelectedSemesterId] = useState<number | null>(null);
-  const [tab, setTab] = useState<Tab>("attendance");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,15 +20,11 @@ export function StudentTrackRecordPage({ user, onLoggedOut }: Props) {
     if (!Number.isFinite(id)) return;
     void getStudentTrackRecord(id).then((res) => {
       setData(res);
-      setSelectedSemesterId(res.current_semester_id ?? res.semesters[res.semesters.length - 1]?.id ?? null);
     }).catch((err) => setError(err instanceof ApiClientError ? err.message : "Failed to load student track record"))
       .finally(() => setLoading(false));
   }, [studentId]);
 
   const resultByCode = useMemo(() => new Map((data?.results ?? []).map((r) => [r.batch.semester_code, r])), [data]);
-  const selectedSemester = data?.semesters.find((s) => s.id === selectedSemesterId) ?? null;
-  const selectedAttendance = selectedSemesterId ? data?.attendance_by_semester[String(selectedSemesterId)] : undefined;
-  const selectedResult = selectedSemester ? resultByCode.get(selectedSemester.code) : undefined;
   const attendedSemesters = Object.keys(data?.attendance_by_semester ?? {}).length;
   const completedResults = data?.results.length ?? 0;
   const totalCredits = (data?.results ?? []).reduce((sum, result) => sum + Number(result.total_credits || 0), 0);
@@ -65,58 +57,40 @@ export function StudentTrackRecordPage({ user, onLoggedOut }: Props) {
         </section>
 
         <section className="track-section">
-          <div className="track-section-head"><div><h3>Semester history</h3><p>Attendance and official result records available in NextGen.</p></div></div>
+          <div className="track-section-head"><div><h3>Semester history</h3><p>Select a semester to view subject-wise attendance and marks.</p></div></div>
           <div className="semester-grid">
             {data.semesters.map((semester) => {
               const att = data.attendance_by_semester[String(semester.id)];
               const result = resultByCode.get(semester.code);
+              const hasData = Boolean(att || result);
               return (
-                <button type="button" key={semester.id} className="semester-card" onClick={() => { setSelectedSemesterId(semester.id); setTab("attendance"); }}>
-                  <div className="semester-card-top"><span className="semester-code">{semester.code}</span><span aria-hidden="true">→</span></div>
-                  <h4>{semester.name}</h4>
-                  <div className="semester-metrics">
-                    <div className="semester-metric"><span>Attendance</span><strong>{att?.pct != null ? `${att.pct}%` : "—"}</strong></div>
-                    <div className="semester-metric"><span>SGPA</span><strong>{result?.sgpa ?? "—"}</strong></div>
-                    <div className="semester-metric"><span>Record</span><strong>{result ? "Marksheet" : att ? "Attendance" : "No data"}</strong></div>
+                <button
+                  type="button"
+                  key={semester.id}
+                  className={`semester-card${hasData ? "" : " semester-card-empty"}`}
+                  disabled={!hasData}
+                  onClick={() => navigate(`/students/${r.id}/track-record/${semester.id}`)}
+                  aria-disabled={!hasData}
+                >
+                  <div className="semester-card-top">
+                    <span className="semester-code">{semester.code}</span>
+                    {hasData && <span aria-hidden="true">→</span>}
                   </div>
+                  <h4>{semester.name}</h4>
+                  {hasData ? (
+                    <div className="semester-metrics">
+                      <div className="semester-metric"><span>Attendance</span><strong>{att?.pct != null ? `${att.pct}%` : "—"}</strong></div>
+                      <div className="semester-metric"><span>SGPA</span><strong>{result?.sgpa ?? "—"}</strong></div>
+                      <div className="semester-metric"><span>Record</span><strong>{result ? "Marksheet" : "Attendance"}</strong></div>
+                    </div>
+                  ) : (
+                    <div className="semester-card-empty-note">No records yet</div>
+                  )}
                 </button>
               );
             })}
           </div>
         </section>
-
-        {selectedSemester && (
-          <section className="track-detail">
-            <div className="track-detail-head">
-              <div><div className="semester-code">{selectedSemester.code}</div><strong>{selectedSemester.name}</strong></div>
-              <div className="track-tabs">
-                <button className={`track-tab${tab === "attendance" ? " active" : ""}`} onClick={() => setTab("attendance")} type="button">Attendance</button>
-                <button className={`track-tab${tab === "marksheet" ? " active" : ""}`} onClick={() => setTab("marksheet")} type="button">Marksheet</button>
-              </div>
-            </div>
-            <div className="track-detail-body">
-              {tab === "attendance" ? (
-                selectedAttendance ? (
-                  <>
-                    <div className="track-att-grid">
-                      <div className="track-mini"><span>Overall</span><strong>{selectedAttendance.pct != null ? `${selectedAttendance.pct}%` : "—"}</strong></div>
-                      <div className="track-mini"><span>Classes attended</span><strong>{selectedAttendance.present_classes}</strong></div>
-                      <div className="track-mini"><span>Classes conducted</span><strong>{selectedAttendance.total_classes}</strong></div>
-                    </div>
-                    <div className="track-empty" style={{ marginTop:10 }}>{selectedAttendance.absent_classes > 0 ? `${selectedAttendance.absent_classes} absence${selectedAttendance.absent_classes === 1 ? "" : "s"} recorded this semester.` : "No absences recorded in the available attendance data."}</div>
-                  </>
-                ) : <div className="track-empty">No attendance record is available for this semester.</div>
-              ) : selectedResult ? (
-                <div className="table-wrap">
-                  <table className="data-table"><thead><tr><th>Subject</th><th className="center">Marks</th><th className="center">Grade</th><th className="center">Credits</th></tr></thead><tbody>
-                    {selectedResult.subjects.map((subject, i) => <tr key={`${subject.subject_code}-${i}`}><td><strong>{subject.subject_name}</strong><div className="subtitle-muted">{subject.subject_code}</div></td><td className="center">{subject.marks}{subject.max_marks ? ` / ${subject.max_marks}` : ""}</td><td className="center">{subject.grade || "—"}</td><td className="center">{subject.credits ?? "—"}</td></tr>)}
-                  </tbody></table>
-                  <div className="track-empty" style={{ marginTop:10, textAlign:"left" }}>SGPA <strong>{selectedResult.sgpa ?? "—"}</strong> · Total credits <strong>{selectedResult.total_credits}</strong> · {selectedResult.result_status || "Result status unavailable"}</div>
-                </div>
-              ) : <div className="track-empty"><strong>Marksheet not available</strong><br />No official result upload has been recorded for this semester.</div>}
-            </div>
-          </section>
-        )}
       </div>
     </AppShell>
   );

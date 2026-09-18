@@ -32,7 +32,7 @@ from webapp.photo_upload import PhotoUploadError, save_profile_photo
 
 from api.deps import CurrentUser, get_current_user
 from api.envelope import ApiError, ok
-from excel_import import FieldSpec, match_headers, normalize_header, roll_prefix_to_batch
+from excel_import import FieldSpec, match_headers, normalize_header
 
 router = APIRouter(prefix="/api/students", tags=["students"])
 
@@ -65,47 +65,84 @@ def _decrypt_row(row) -> dict:
     return d
 
 
-def _compute_year_and_batch(d: dict) -> tuple[str, str]:
-    roll_no = str(d.get("roll_no") or "").strip().upper()
-    sem_id = d.get("current_semester_id")
-    current_year = datetime.now().year
-    cohort = roll_prefix_to_batch(roll_no)
-    joining_year = int(cohort[:4]) if cohort else None
+SEMESTER_YEAR_BY_ID = {
+    1: 1, 2: 1,
+    3: 2, 4: 2,
+    5: 3, 6: 3,
+    7: 4, 8: 4,
+}
+SEMESTER_YEAR_LABELS = {1: "1st Year", 2: "2nd Year", 3: "3rd Year", 4: "4th Year"}
 
-    # Preserve the stable, roll-derived cohort when it is available.
-    batch = f"{cohort} Batch" if cohort else ""
 
-    # Determine Year of study from the live academic year / admission year.
-    year = ""
-    if joining_year:
-        diff = current_year - joining_year + 1
-        if diff <= 1: year = "1st Year"
-        elif diff == 2: year = "2nd Year"
-        elif diff == 3: year = "3rd Year"
-        else: year = "4th Year"
+def _academic_year_start(reference_date: datetime | None = None) -> int:
+    """Return the academic-year start year used for cohort calculations.
 
-    # Only malformed/unparseable roll numbers need a semester-based fallback.
-    # The fallback is computed relative to the current calendar/academic year,
-    # never from hardcoded future-facing literals.
-    if not year:
-        if sem_id in (1, 2):
-            joining_year = current_year
-            year = "1st Year"
-        elif sem_id in (3, 4):
-            joining_year = current_year - 1
-            year = "2nd Year"
-        elif sem_id in (5, 6):
-            joining_year = current_year - 2
-            year = "3rd Year"
-        elif sem_id in (7, 8):
-            joining_year = current_year - 3
-            year = "4th Year"
-        else:
-            joining_year = current_year
-            year = "1st Year"
-        batch = f"{joining_year}-{joining_year + 4} Batch"
+    The college cycle is treated as June→May. September 2026 therefore
+    belongs to academic year 2026-27; January–May belongs to the previous
+    academic-year start.
+    """
+    today = reference_date or datetime.now()
+    return today.year if today.month >= 6 else today.year - 1
 
-    return year, batch
+
+def _year_number_from_semester_id(semester_id: int | None) -> int | None:
+    """Return the year-of-study represented by the selected semester.
+
+    This is the sole source of truth for displayed year/batch. Roll-number
+    prefixes are intentionally ignored because lateral-entry and legacy roll
+    numbering can encode a different cohort than the student's current class.
+    """
+    if semester_id is None:
+        return None
+    try:
+        return SEMESTER_YEAR_BY_ID.get(int(semester_id))
+    except (TypeError, ValueError):
+        return None
+
+
+def _compute_year_and_batch(d: dict, reference_date: datetime | None = None) -> tuple[str, str]:
+    """Derive year of study and batch from the student's current semester only.
+
+    Example for academic year 2026-27:
+      III-I / III-II -> 3rd Year -> 2024-2028 Batch
+      II-I / II-II   -> 2nd Year -> 2025-2029 Batch
+
+    The roll number is deliberately not consulted. This keeps lateral-entry
+    and non-standard roll formats from being misclassified.
+    """
+    semester_year = _year_number_from_semester_id(d.get("current_semester_id"))
+    if not semester_year:
+        return "", ""
+
+    academic_start = _academic_year_start(reference_date)
+    joining_year = academic_start - semester_year + 1
+    return SEMESTER_YEAR_LABELS[semester_year], f"{joining_year}-{joining_year + 4} Batch"
+
+
+def _validate_semester_selection(c, semester_id: int | None) -> None:
+    """Validate that the selected current semester exists.
+
+    There is intentionally no roll-number/cohort consistency check here:
+    the selected semester is authoritative for current year and batch.
+    """
+    if semester_id is None:
+        return
+    sem = c.execute("SELECT id FROM academic_semesters WHERE id=?", (semester_id,)).fetchone()
+    if not sem:
+        raise ValueError("Selected semester does not exist")
+
+
+def _enforce_semester_year_filter(rows: list[dict], semester_id: int | None) -> list[dict]:
+    """Defensive read-side fence: a semester can only show its own year.
+
+    Year is already derived from the semester in _compute_year_and_batch, so
+    this is mainly a guard against malformed API rows or future regressions.
+    """
+    semester_year = _year_number_from_semester_id(semester_id)
+    if not semester_year:
+        return rows
+    expected_label = SEMESTER_YEAR_LABELS[semester_year]
+    return [row for row in rows if row.get("year_of_study") == expected_label]
 
 
 def _serialize_list_row(row) -> dict:
@@ -182,6 +219,37 @@ def _student_scope_sql(user: CurrentUser) -> tuple[str, list[Any]]:
     return " AND 1=0", []
 
 
+def _student_search_sql(q: str) -> tuple[str, list[Any]]:
+    """Build the deliberately narrow student-list search predicate.
+
+    Supported search targets are only:
+      * name: partial text match
+      * roll number: exact match, or a suffix match using the last 1–4
+        digits entered by the user
+      * phone: exact match only for a 10-digit number
+
+    Email and parent phone are intentionally excluded. A numeric query of
+    1–4 digits is interpreted as a roll-number suffix; a 10-digit numeric
+    query is an exact student-phone lookup. Other non-empty queries are
+    treated as name text plus exact roll-number lookup, which lets a full
+    alphanumeric roll number work without making arbitrary partial roll
+    searches possible.
+    """
+    value = str(q or "").strip()
+    if not value:
+        return "", []
+
+    if value.isdigit():
+        if 1 <= len(value) <= 4:
+            return " AND RIGHT(roll_no, ?) = ?", [len(value), value]
+        if len(value) == 10:
+            return " AND phone = ?", [value]
+        return " AND UPPER(roll_no) = UPPER(?)", [value]
+
+    like = f"%{value}%"
+    return " AND (name LIKE ? OR UPPER(roll_no) = UPPER(?))", [like, value]
+
+
 @router.get("/semesters")
 async def student_semesters(user: CurrentUser = Depends(get_current_user)):
     if user.role == "STUDENT":
@@ -199,12 +267,11 @@ async def students_list(
 ):
     if user.role == "STUDENT":
         raise ApiError("Access denied", 403, "FORBIDDEN")
-    like = f"%{q.strip()}%"
-    sql = (
-        "SELECT * FROM students WHERE department='CSD' "
-        "AND (name LIKE ? OR roll_no LIKE ? OR email LIKE ? OR phone LIKE ? OR parent_phone LIKE ?)"
-    )
-    args: list[Any] = [like, like, like, like, like]
+    sql = "SELECT * FROM students WHERE department='CSD'"
+    args: list[Any] = []
+    search_sql, search_args = _student_search_sql(q)
+    sql += search_sql
+    args.extend(search_args)
     scope_sql, scope_args = _student_scope_sql(user)
     sql += scope_sql
     args.extend(scope_args)
@@ -217,7 +284,13 @@ async def students_list(
     sql += " ORDER BY UPPER(roll_no) ASC, name ASC"
     with connect() as c:
         rows = c.execute(sql, args).fetchall()
-    return ok([_serialize_list_row(r) for r in rows])
+    serialized = [_serialize_list_row(r) for r in rows]
+    # Keep legacy/stale rows from leaking into an impossible year/semester
+    # combination. The underlying record is still caught by write-time
+    # validation, but list views must remain logically correct even before
+    # old data is repaired.
+    serialized = _enforce_semester_year_filter(serialized, semester_id)
+    return ok(serialized)
 
 
 @router.get("/pdf")
@@ -234,12 +307,11 @@ async def students_pdf(
     if user.role not in ("HOD", "ADMIN"):
         raise ApiError("HOD or Admin access only", 403, "FORBIDDEN")
 
-    like = f"%{q.strip()}%"
-    sql = (
-        "SELECT * FROM students WHERE department='CSD' "
-        "AND (name LIKE ? OR roll_no LIKE ? OR email LIKE ? OR phone LIKE ? OR parent_phone LIKE ?)"
-    )
-    args: list[Any] = [like, like, like, like, like]
+    sql = "SELECT * FROM students WHERE department='CSD'"
+    args: list[Any] = []
+    search_sql, search_args = _student_search_sql(q)
+    sql += search_sql
+    args.extend(search_args)
     scope_sql, scope_args = _student_scope_sql(user)
     sql += scope_sql
     args.extend(scope_args)
@@ -260,6 +332,7 @@ async def students_pdf(
             sem_row = c.execute("SELECT code, name FROM academic_semesters WHERE id=?", (semester_id,)).fetchone()
 
     serialized = [_serialize_list_row(r) for r in rows]
+    serialized = _enforce_semester_year_filter(serialized, semester_id)
 
     YEAR_LABELS = {"1": "1st Year", "2": "2nd Year", "3": "3rd Year", "4": "4th Year"}
     if year and year in YEAR_LABELS:
@@ -380,6 +453,69 @@ async def student_track_record(student_id: int, user: CurrentUser = Depends(get_
         "semesters": [dict(s) for s in semester_rows],
         "attendance_by_semester": attendance_by_semester,
         "results": results.get("results", []),
+    })
+
+
+@router.get("/{student_id}/track-record/{semester_id}")
+async def student_track_record_semester(student_id: int, semester_id: int, user: CurrentUser = Depends(get_current_user)):
+    if user.role == "STUDENT":
+        raise ApiError("Access denied", 403, "FORBIDDEN")
+    with connect() as c:
+        if user.role == "ADMIN" or user.username == "admin":
+            row = c.execute("SELECT * FROM students WHERE id=? AND department='CSD'", (student_id,)).fetchone()
+        elif user.role == "HOD":
+            row = c.execute("SELECT * FROM students WHERE id=? AND department='CSD' AND (hod_username=? OR hod_username IS NULL)", (student_id, user.username)).fetchone()
+        else:
+            hod = _get_user_hod_username(user.username)
+            row = c.execute("SELECT * FROM students WHERE id=? AND department='CSD' AND (hod_username=? OR hod_username IS NULL)", (student_id, hod)).fetchone() if hod else None
+        if not row:
+            raise ApiError("Student not found", 404, "NOT_FOUND")
+        semester = c.execute("SELECT id, code, name FROM academic_semesters WHERE id=?", (semester_id,)).fetchone()
+        if not semester:
+            raise ApiError("Semester not found", 404, "NOT_FOUND")
+        student = _serialize_full(row)
+
+    from sms_app.services.attendance_service import student_subject_attendance_for_semester, attendance_pct_band
+    att_rows = student_subject_attendance_for_semester(row["roll_no"], semester_id)
+    subjects_attendance = []
+    total_classes = 0
+    total_present = 0
+    for ar in att_rows:
+        pres = int(ar["present_sessions"] or 0)
+        tot = int(ar["total_sessions"] or 0)
+        pct, band = attendance_pct_band(pres, tot)
+        total_classes += tot
+        total_present += pres
+        subjects_attendance.append({
+            "subject_id": ar["subject_id"],
+            "subject_code": ar["subject_code"],
+            "subject_name": ar["subject_name"],
+            "present_sessions": pres,
+            "total_sessions": tot,
+            "absent_sessions": tot - pres,
+            "pct": pct,
+            "band": band,
+        })
+    overall_pct, overall_band = attendance_pct_band(total_present, total_classes)
+
+    from sms_app.services.learning_service import get_student_results
+    all_results = get_student_results(roll_no=row["roll_no"]).get("results", [])
+    # get_student_results doesn't echo semester_id on batch — match by the
+    # semester code instead, which it does return.
+    semester_result = next((r for r in all_results if r["batch"]["semester_code"] == semester["code"]), None)
+
+    return ok({
+        "student": student,
+        "semester": dict(semester),
+        "attendance": {
+            "subjects": subjects_attendance,
+            "total_classes": total_classes,
+            "total_present": total_present,
+            "total_absent": total_classes - total_present,
+            "overall_pct": overall_pct,
+            "overall_band": overall_band,
+        },
+        "result": semester_result,
     })
 
 
@@ -600,11 +736,12 @@ async def student_create(body: StudentBody, user: CurrentUser = Depends(get_curr
         validate_student(data)
         if data["dob"]:
             datetime.strptime(data["dob"], "%Y-%m-%d")
-        data["batch"] = roll_prefix_to_batch(data["roll_no"]) or _compute_year_and_batch({**data, "current_semester_id": body.current_semester_id})[1].removesuffix(" Batch")
-        # Encrypt AFTER validation — §4.4 ordering requirement
-        data["aadhaar_number"] = encrypt_field(data["aadhaar_number"])
-        data["apaar_id"] = encrypt_field(data["apaar_id"])
         with connect() as c:
+            _validate_semester_selection(c, body.current_semester_id)
+            data["batch"] = _compute_year_and_batch({**data, "current_semester_id": body.current_semester_id})[1].removesuffix(" Batch")
+            # Encrypt AFTER validation — §4.4 ordering requirement
+            data["aadhaar_number"] = encrypt_field(data["aadhaar_number"])
+            data["apaar_id"] = encrypt_field(data["apaar_id"])
             c.execute(
                 """INSERT INTO students(roll_no,name,department,email,phone,parent_phone,dob,address,father_name,
                    category,gender,seat_category,apaar_id,aadhaar_number,
@@ -954,6 +1091,7 @@ async def student_bulk_import(
                         merged[k] = v
                     merged["department"] = "CSD"
                     merged["current_semester_id"] = semester_id
+                    _validate_semester_selection(c, semester_id)
                     merged = _drop_unverified_aadhaar(merged)
 
                     validate_student({k: _cell_to_str(merged.get(k)) for k in STUDENT_DB_KEYS if k != "department"} | {"department": "CSD"})
@@ -993,10 +1131,10 @@ async def student_bulk_import(
                     else:
                         merged["apaar_id"] = existing.get("apaar_id")
 
-                    # Login linkage follows roll number when it is deliberately changed.
-                    # Recompute the persisted cohort before the positional UPDATE tuple is built.
-                    if merged["roll_no"] != existing["roll_no"]:
-                        merged["batch"] = roll_prefix_to_batch(merged["roll_no"]) or _compute_year_and_batch({**merged, "current_semester_id": semester_id})[1].removesuffix(" Batch")
+                    # Batch is derived from current semester, never from roll-number structure.
+                    # Recompute it on every import update so legacy/stale stored values are repaired.
+                    merged["batch"] = _compute_year_and_batch({**merged, "current_semester_id": semester_id})[1].removesuffix(" Batch")
+
 
                     c.execute(
                         """UPDATE students SET roll_no=?,name=?,department=?,email=NULLIF(?,''),phone=?,parent_phone=?,dob=?,
@@ -1042,11 +1180,12 @@ async def student_bulk_import(
                     continue
 
                 data = _drop_unverified_aadhaar(data)
+                _validate_semester_selection(c, semester_id)
                 validate_student(data)
                 if data["dob"]:
                     datetime.strptime(data["dob"], "%Y-%m-%d")
                 enc_data = dict(data)
-                enc_data["batch"] = roll_prefix_to_batch(data["roll_no"]) or _compute_year_and_batch({**data, "current_semester_id": semester_id})[1].removesuffix(" Batch")
+                enc_data["batch"] = _compute_year_and_batch({**data, "current_semester_id": semester_id})[1].removesuffix(" Batch")
                 enc_data["aadhaar_number"] = encrypt_field(data["aadhaar_number"])
                 enc_data["apaar_id"] = encrypt_field(data["apaar_id"])
                 c.execute(
@@ -1115,11 +1254,12 @@ async def student_update(student_id: int, body: StudentBody, user: CurrentUser =
         validate_student(data)
         if data["dob"]:
             datetime.strptime(data["dob"], "%Y-%m-%d")
-        data["batch"] = roll_prefix_to_batch(data["roll_no"]) or _compute_year_and_batch({**data, "current_semester_id": body.current_semester_id})[1].removesuffix(" Batch")
-        # Encrypt AFTER validation — §4.4 ordering requirement
-        data["aadhaar_number"] = encrypt_field(data["aadhaar_number"])
-        data["apaar_id"] = encrypt_field(data["apaar_id"])
         with connect() as c:
+            _validate_semester_selection(c, body.current_semester_id)
+            data["batch"] = _compute_year_and_batch({**data, "current_semester_id": body.current_semester_id})[1].removesuffix(" Batch")
+            # Encrypt AFTER validation — §4.4 ordering requirement
+            data["aadhaar_number"] = encrypt_field(data["aadhaar_number"])
+            data["apaar_id"] = encrypt_field(data["apaar_id"])
             c.execute(
                 """UPDATE students SET roll_no=?,name=?,department=?,email=NULLIF(?,''),phone=?,parent_phone=?,dob=?,
                    address=?,father_name=?,category=?,gender=?,seat_category=?,apaar_id=?,aadhaar_number=?,

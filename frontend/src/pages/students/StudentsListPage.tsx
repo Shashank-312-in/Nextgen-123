@@ -205,7 +205,15 @@ export function StudentsListPage({ user, onLoggedOut }: StudentsListPageProps) {
 
     if (semesterFilter) {
       const semId = Number(semesterFilter);
-      list = list.filter((r) => r.current_semester_id === semId);
+      const selectedSemester = semesters.find((s) => s.id === semId);
+      const romanYear = selectedSemester?.code?.split("-")[0];
+      const semesterYearNumber = romanYear === "I" ? 1 : romanYear === "II" ? 2 : romanYear === "III" ? 3 : romanYear === "IV" ? 4 : null;
+      const expectedYearLabel = semesterYearNumber ? `${semesterYearNumber === 1 ? "1st" : semesterYearNumber === 2 ? "2nd" : semesterYearNumber === 3 ? "3rd" : "4th"} Year` : null;
+
+      list = list.filter((r) =>
+        r.current_semester_id === semId &&
+        (!expectedYearLabel || r.year_of_study === expectedYearLabel)
+      );
     }
 
     return [...list].sort((a, b) => {
@@ -245,8 +253,8 @@ export function StudentsListPage({ user, onLoggedOut }: StudentsListPageProps) {
                 type="text"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                placeholder="Search students…"
-                aria-label="Search students"
+                placeholder="Name, roll no. / last 1–4 digits, or exact phone"
+                aria-label="Search by student name, roll number, or exact phone number"
                 autoFocus={searchOpen}
               />
               <button
@@ -423,10 +431,10 @@ export function StudentsListPage({ user, onLoggedOut }: StudentsListPageProps) {
                 </td>
                 <td data-label="Year & Batch">
                   <span className="chip chip-blue" style={{ fontSize: 11, padding: "2px 8px" }}>
-                    {r.year_of_study || "1st Year"}
+                    {r.year_of_study || "—"}
                   </span>
                   <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2, fontWeight: 600 }}>
-                    {r.batch || "2026-2030 Batch"}
+                    {r.batch || "—"}
                   </div>
                 </td>
                 <td data-label="Email">{r.email || "—"}</td>

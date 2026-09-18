@@ -111,6 +111,9 @@ export function StudentFormPage({ user, onLoggedOut }: StudentFormPageProps) {
       return;
     }
 
+    // Academic year and batch are derived from the selected current semester.
+    // Roll-number prefixes are intentionally NOT used here because lateral-entry
+    // and legacy roll formats do not reliably encode the student's current year.
     try {
       const semId = currentSemesterId === "" ? null : Number(currentSemesterId);
       const result = isEdit
