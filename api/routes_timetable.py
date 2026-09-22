@@ -6,7 +6,7 @@ Faculty/Student: read the published timetable only.
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from api.deps import CurrentUser, get_current_user
 from api.envelope import ApiError, ok
 from database import connect, audit
+from sms_app.services.timetable_service import create_override, delete_override, resolve_effective_schedule, list_effective_today_for_hod, local_now
 
 router = APIRouter(prefix="/api/timetables", tags=["timetable"])
 
@@ -62,6 +63,22 @@ class TimetableSaveBody(BaseModel):
     periods: list[dict[str, Any]] = Field(default_factory=lambda: DEFAULT_PERIODS.copy())
     entries: list[TimetableEntryBody] = Field(default_factory=list)
     status: str = Field(default="DRAFT", pattern="^(DRAFT|PUBLISHED)$")
+
+
+class TimetableOverrideBody(BaseModel):
+    timetable_entry_id: int
+    override_date: date
+    substitute_faculty_username: str
+    reason: str = Field(min_length=1, max_length=300)
+
+
+def _require_hod_or_admin(user: CurrentUser):
+    if user.role not in ("HOD", "ADMIN"):
+        raise ApiError("HOD or Admin access required", 403, "FORBIDDEN")
+
+def _require_hod(user: CurrentUser):
+    if user.role != "HOD":
+        raise ApiError("HOD access required", 403, "FORBIDDEN")
 
 
 def _require_builder(user: CurrentUser):
@@ -206,6 +223,88 @@ def _serialize_timetable(c, row):
             for e in entries
         ],
     }
+
+
+@router.get("/today")
+async def timetable_today(
+    target_date: date | None = Query(default=None),
+    user: CurrentUser = Depends(get_current_user),
+):
+    target = target_date or local_now().date()
+    if user.role == "FACULTY":
+        rows = resolve_effective_schedule(faculty_username=user.username, target_date=target)
+    elif user.role == "HOD":
+        rows = list_effective_today_for_hod(hod_username=user.username, target_date=target)
+    elif user.role == "ADMIN":
+        rows = resolve_effective_schedule(faculty_username="", target_date=target)
+    else:
+        raise ApiError("Staff access required", 403, "FORBIDDEN")
+    return ok({"date": target.isoformat(), "entries": rows})
+
+
+@router.get("/overrides")
+async def timetable_overrides(
+    target_date: date | None = Query(default=None),
+    user: CurrentUser = Depends(get_current_user),
+):
+    _require_hod(user)
+    target = target_date or local_now().date()
+    with connect() as c:
+        where = ["o.override_date=%s"]
+        params = [target.isoformat()]
+        if user.role == "HOD":
+            where.append("LOWER(t.hod_username)=LOWER(%s)")
+            params.append(user.username)
+        rows = c.execute(
+            f"""
+            SELECT o.id,o.override_date,o.substitute_faculty_username,o.reason,o.approved_by,o.created_at,
+                   e.timetable_id,e.start_slot,e.duration,e.section,e.day_of_week,e.block_type,e.subject_id,
+                   s.code AS subject_code,s.name AS subject_name,t.semester_id,t.section_name,t.academic_year
+            FROM timetable_overrides o
+            JOIN timetable_entries e ON e.id=o.timetable_entry_id
+            JOIN timetables t ON t.id=e.timetable_id
+            LEFT JOIN subjects s ON s.id=e.subject_id
+            WHERE {' AND '.join(where)}
+            ORDER BY e.start_slot,o.id
+            """,
+            tuple(params),
+        ).fetchall()
+    return ok({"date": target.isoformat(), "overrides": [dict(r) for r in rows]})
+
+
+@router.post("/overrides")
+async def timetable_override_create(body: TimetableOverrideBody, user: CurrentUser = Depends(get_current_user)):
+    _require_hod(user)
+    try:
+        row = create_override(
+            timetable_entry_id=body.timetable_entry_id,
+            override_date=body.override_date,
+            substitute_faculty_username=body.substitute_faculty_username,
+            reason=body.reason,
+            approved_by=user.username,
+            actor_role=user.role,
+        )
+    except PermissionError as exc:
+        raise ApiError(str(exc), 403, "FORBIDDEN")
+    except ValueError as exc:
+        raise ApiError(str(exc), 400, "VALIDATION_ERROR")
+    with connect() as c:
+        audit(c, user.username, "CREATE", "timetable_override", f"id={row['id']}; entry={body.timetable_entry_id}; date={body.override_date.isoformat()}", actor_role=user.role)
+    return ok({"override": dict(row)}, status_code=201)
+
+
+@router.delete("/overrides/{override_id}")
+async def timetable_override_delete(override_id: int, user: CurrentUser = Depends(get_current_user)):
+    _require_hod(user)
+    try:
+        row = delete_override(override_id=override_id, actor_username=user.username, actor_role=user.role)
+    except PermissionError as exc:
+        raise ApiError(str(exc), 403, "FORBIDDEN")
+    except ValueError as exc:
+        raise ApiError(str(exc), 404, "NOT_FOUND")
+    with connect() as c:
+        audit(c, user.username, "DELETE", "timetable_override", f"id={override_id}", actor_role=user.role)
+    return ok({"deleted": True, "id": int(row["id"])})
 
 
 @router.get("")

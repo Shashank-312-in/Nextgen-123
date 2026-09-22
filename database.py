@@ -773,14 +773,27 @@ def init_db(db_name=None):
         if "batch" not in existing_student_cols:
             c.execute("ALTER TABLE students ADD COLUMN batch VARCHAR(16) NULL")
             c.execute("CREATE INDEX idx_students_batch ON students(department, batch)")
-            for student in c.execute("SELECT id, roll_no FROM students WHERE batch IS NULL").fetchall():
-                roll_no = str(student.get("roll_no") or "").strip().upper()
+            # Semester is authoritative for cohort reconstruction. Never infer
+            # a student's batch from roll-number shape during migration because
+            # lateral-entry/legacy numbering can legitimately encode a different
+            # admission year than the student's actual current academic year.
+            semester_rows = c.execute("SELECT id, sort_order FROM academic_semesters").fetchall()
+            semester_year_by_id = {}
+            for semester in semester_rows:
+                try:
+                    sort_order = int(semester["sort_order"])
+                except (TypeError, ValueError):
+                    continue
+                if sort_order > 0:
+                    semester_year_by_id[int(semester["id"])] = (sort_order + 1) // 2
+            now = datetime.now()
+            academic_start = now.year if now.month >= 6 else now.year - 1
+            for student in c.execute("SELECT id, current_semester_id FROM students WHERE batch IS NULL").fetchall():
+                semester_year = semester_year_by_id.get(int(student["current_semester_id"])) if student.get("current_semester_id") else None
                 cohort_batch = None
-                if len(roll_no) >= 2 and roll_no[:2].isdigit():
-                    yy = int(roll_no[:2])
-                    if 18 <= yy <= 35:
-                        joining_year = 2000 + yy
-                        cohort_batch = f"{joining_year}-{joining_year + 4}"
+                if semester_year:
+                    joining_year = academic_start - semester_year + 1
+                    cohort_batch = f"{joining_year}-{joining_year + 4}"
                 c.execute("UPDATE students SET batch=? WHERE id=?", (cohort_batch, student["id"]))
 
         c.execute("""
@@ -921,6 +934,64 @@ def init_db(db_name=None):
             FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE SET NULL,
             FOREIGN KEY(faculty_username) REFERENCES users(username) ON UPDATE CASCADE ON DELETE SET NULL,
             INDEX idx_timetable_entries_lookup (timetable_id, day_of_week, section, start_slot)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """)
+
+        c.execute("""
+        CREATE TABLE IF NOT EXISTS timetable_overrides(
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            timetable_entry_id INT NOT NULL,
+            override_date DATE NOT NULL,
+            substitute_faculty_username VARCHAR(64) NOT NULL,
+            reason VARCHAR(300) NOT NULL,
+            approved_by VARCHAR(64) NOT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(timetable_entry_id, override_date),
+            FOREIGN KEY(timetable_entry_id) REFERENCES timetable_entries(id) ON DELETE CASCADE,
+            INDEX idx_timetable_overrides_date (override_date, substitute_faculty_username)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """)
+
+        # Historical override audit fields are intentionally not foreign keys to users.
+        # A deleted faculty/HOD account must not make the override history undeletable.
+        # This migration also repairs databases created by an earlier revision that did
+        # temporarily add those FKs.
+        try:
+            override_user_fks = c.execute(
+                """
+                SELECT DISTINCT CONSTRAINT_NAME
+                FROM information_schema.KEY_COLUMN_USAGE
+                WHERE TABLE_SCHEMA=DATABASE()
+                  AND TABLE_NAME='timetable_overrides'
+                  AND REFERENCED_TABLE_NAME='users'
+                  AND REFERENCED_COLUMN_NAME='username'
+                """
+            ).fetchall()
+            for fk in override_user_fks:
+                constraint = str(fk["CONSTRAINT_NAME"])
+                safe_constraint = constraint.replace("`", "``")
+                c.execute(f"ALTER TABLE timetable_overrides DROP FOREIGN KEY `{safe_constraint}`")
+        except Exception:
+            # Some test/database proxies do not expose information_schema.
+            # The CREATE TABLE above is already safe and the migration is best-effort.
+            pass
+
+
+        c.execute("""
+        CREATE TABLE IF NOT EXISTS faculty_class_notifications(
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            faculty_username VARCHAR(64) NOT NULL,
+            timetable_entry_id INT NOT NULL,
+            occurrence_date DATE NOT NULL,
+            scheduled_for DATETIME NOT NULL,
+            status VARCHAR(16) NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING','DELIVERED','CANCELLED')),
+            delivered_at DATETIME NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(faculty_username, timetable_entry_id, occurrence_date),
+            FOREIGN KEY(faculty_username) REFERENCES users(username) ON UPDATE CASCADE ON DELETE CASCADE,
+            FOREIGN KEY(timetable_entry_id) REFERENCES timetable_entries(id) ON DELETE CASCADE,
+            INDEX idx_faculty_notifications_due (status, scheduled_for),
+            INDEX idx_faculty_notifications_user (faculty_username, status, scheduled_for)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
         """)
 

@@ -38,6 +38,7 @@ body { background: var(--ng-bg) !important; color: var(--ng-text) !important; fo
 .ng-nav-link:hover:not(.active) { background: rgba(255,255,255,.07) !important; border-color: transparent !important; transform:none !important; }
 .ng-nav-link.active { background:#fff !important; color:var(--ng-navy) !important; border-color:#fff !important; box-shadow: none !important; transform:none !important; font-weight:750 !important; }
 .ng-nav-link.active::before, .ng-nav-link.active::after { display:none !important; }
+.ng-nav-link.active .nav-icon { color:var(--ng-navy) !important; }
 .ng-nav-link .nav-icon { width: 18px; display:inline-flex; color:currentColor; }
 .ng-sidebar-bottom { margin-top:auto; border-top:1px solid rgba(255,255,255,.10); padding-top:14px; }
 .ng-user-card { display:flex; align-items:center; gap:9px; padding:8px; margin-bottom:8px; }

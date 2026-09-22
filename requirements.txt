@@ -17,3 +17,4 @@ pytest-html
 pytest-asyncio  # required to recognize @pytest.mark.asyncio in tests/test_08_db_proxy.py
 pypdf  # used by tests/test_security_hardening_offline.py to read back generated PDFs
 xlrd==2.0.1
+tzdata  # Windows/Python zoneinfo data for APP_TIMEZONE=Asia/Kolkata

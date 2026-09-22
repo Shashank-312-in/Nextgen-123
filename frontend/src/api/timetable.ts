@@ -124,3 +124,50 @@ export async function deleteTimetable(id: number): Promise<{ deleted: boolean; i
     method: "DELETE",
   });
 }
+
+// ── Day schedule + substitute overrides (HOD) ───────────────────────
+export interface DayScheduleEntry {
+  timetable_entry_id: number;
+  timetable_id: number;
+  target_date: string;
+  section_name: string;
+  section: TimetableSection;
+  start_slot: number;
+  duration: number;
+  period: string | number | null;
+  start_time: string | null;
+  end_time: string | null;
+  block_type: TimetableBlockType;
+  subject_code: string | null;
+  subject_name: string | null;
+  custom_label: string | null;
+  room: string | null;
+  regular_faculty_username: string | null;
+  regular_faculty_name: string | null;
+  substitute_faculty_username: string | null;
+  substitute_faculty_name: string | null;
+  override_id: number | null;
+  override_reason: string | null;
+}
+
+export function getDaySchedule(targetDate: string) {
+  return apiFetch<{ date: string; entries: DayScheduleEntry[] }>(
+    `/api/timetables/today?target_date=${encodeURIComponent(targetDate)}`,
+  );
+}
+
+export function createOverride(body: {
+  timetable_entry_id: number;
+  override_date: string;
+  substitute_faculty_username: string;
+  reason: string;
+}) {
+  return apiFetch<{ override: { id: number } }>("/api/timetables/overrides", {
+    method: "POST",
+    body,
+  });
+}
+
+export function deleteOverride(overrideId: number) {
+  return apiFetch<{ deleted: boolean; id: number }>(`/api/timetables/overrides/${overrideId}`, { method: "DELETE" });
+}

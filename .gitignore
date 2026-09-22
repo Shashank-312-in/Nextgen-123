@@ -15,11 +15,13 @@ zips/
 .pytest_cache
 
 .venv/
+TASK_STATE
 # Build outputs
 frontend/dist/
 frontend/node_modules/
 
 USERMANUAL.txt
+load-tests
 
 IMPLEMENTATION_STATE.md
 VERSION.md

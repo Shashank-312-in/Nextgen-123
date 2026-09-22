@@ -138,3 +138,21 @@ export async function updateStudentSelfEditSetting(enabled: boolean): Promise<St
     body: { student_self_edit_enabled: enabled },
   });
 }
+
+// ── Faculty class reminders ─────────────────────────────────────────
+// The server atomically claims a due reminder (PENDING → DELIVERED), so a
+// given reminder is returned exactly once. Never retry a successful call.
+export interface PendingClassNotification {
+  id: number;
+  scheduled_for: string;
+  occurrence_date: string;
+  subject_code: string | null;
+  subject_name: string | null;
+  custom_label: string | null;
+  room: string | null;
+  section_name: string | null;
+}
+
+export function getPendingClassNotifications() {
+  return apiFetch<{ notifications: PendingClassNotification[] }>("/api/dashboard/notifications/pending");
+}

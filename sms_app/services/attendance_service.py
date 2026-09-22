@@ -1,10 +1,481 @@
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
+from contextlib import nullcontext
+from pathlib import Path
+import io
+import re
+from difflib import SequenceMatcher
 
-from database import audit, connect
+from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.utils import get_column_letter
+from openpyxl.utils.datetime import from_excel
+
+from excel_import import FieldSpec, MatchReport, match_headers, normalize_header
+from sms_app.services.timetable_service import local_now
+
+from database import audit, connect, IntegrityError
 
 VALID_SESSION_TYPES = ("CLASS", "LAB")
 VALID_CLASS_HOURS = (1, 2, 3)
 LAB_HOURS = 3
+
+ATTENDANCE_IMPORT_ALLOWED_EXT = {".xlsx", ".xlsm"}
+ATTENDANCE_IMPORT_MAX_BYTES = 10 * 1024 * 1024
+ATTENDANCE_IMPORT_MAX_ROWS = 25000
+
+# Historical sheets are intentionally tolerant about the header wording but
+# strict about the semantic fields needed to build a real attendance session.
+ATTENDANCE_FIELD_ALIASES = {
+    "roll_no": {"roll no", "roll number", "roll", "hall ticket", "hallticket", "h t no", "ht no", "student id"},
+    "date": {"date", "attendance date", "class date", "session date"},
+    "subject_code": {"subject code", "code", "subject id", "paper code"},
+    "subject_name": {"subject name", "subject", "subject title", "paper name"},
+    "status": {"status", "attendance", "attendance status", "present absent", "p a"},
+    "session_type": {"session type", "type", "class lab", "class type"},
+    "duration_hours": {"duration", "duration hours", "hours", "class hours"},
+    "topic": {"topic", "today's topic", "todays topic", "class topic", "lecture topic"},
+}
+
+ATTENDANCE_FIELD_SPECS = [
+    FieldSpec(key=key, aliases={normalize_header(v) for v in aliases}, required=key in {"roll_no", "date", "status"})
+    for key, aliases in ATTENDANCE_FIELD_ALIASES.items()
+]
+
+_ATTENDANCE_STATUS_VALUES = {
+    "present": "Present", "p": "Present", "1": "Present", "yes": "Present", "y": "Present", "true": "Present",
+    "absent": "Absent", "a": "Absent", "0": "Absent", "no": "Absent", "n": "Absent", "false": "Absent",
+}
+_DATE_FORMATS = ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%Y/%m/%d", "%d.%m.%Y")
+
+
+def _attendance_import_cell(value):
+    if value is None:
+        return ""
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value).strip()
+
+
+def _parse_import_date(value, *, row_no):
+    if isinstance(value, datetime):
+        parsed = value.date()
+    elif isinstance(value, date):
+        parsed = value
+    elif isinstance(value, (int, float)) and not isinstance(value, bool):
+        try:
+            excel_value = from_excel(value)
+            parsed = excel_value.date() if isinstance(excel_value, datetime) else None
+        except (TypeError, ValueError, OverflowError):
+            parsed = None
+        if parsed is None:
+            raw = _attendance_import_cell(value)
+            raise ValueError(f"Row {row_no}: invalid attendance date '{raw}'")
+    else:
+        raw = _attendance_import_cell(value)
+        parsed = None
+        for fmt in _DATE_FORMATS:
+            try:
+                parsed = datetime.strptime(raw, fmt).date()
+                break
+            except ValueError:
+                continue
+        if parsed is None:
+            raise ValueError(f"Row {row_no}: invalid attendance date '{raw}'")
+    if parsed > local_now().date():
+        raise ValueError(f"Row {row_no}: attendance date cannot be in the future")
+    return parsed.isoformat()
+
+
+def _parse_import_status(value, *, row_no):
+    if isinstance(value, bool):
+        return "Present" if value else "Absent"
+    raw = _attendance_import_cell(value).casefold()
+    status = _ATTENDANCE_STATUS_VALUES.get(raw)
+    if status:
+        return status
+    raise ValueError(f"Row {row_no}: status must be Present/Absent (accepted: P/A, 1/0, Yes/No)")
+
+
+def _parse_import_session_type(value, *, row_no):
+    raw = _attendance_import_cell(value).upper() if value not in (None, "") else "CLASS"
+    if raw in {"CLASS", "THEORY", "LECTURE"}:
+        return "CLASS"
+    if raw in {"LAB", "PRACTICAL", "PRACTICALS"}:
+        return "LAB"
+    raise ValueError(f"Row {row_no}: session type must be CLASS or LAB")
+
+
+def _parse_import_duration(value, session_type, *, row_no):
+    if session_type == "LAB":
+        return LAB_HOURS
+    if value in (None, ""):
+        return 1
+    raw = _attendance_import_cell(value)
+    try:
+        hours = int(float(raw))
+    except (TypeError, ValueError):
+        raise ValueError(f"Row {row_no}: duration must be 1, 2, or 3 hours")
+    if hours not in VALID_CLASS_HOURS:
+        raise ValueError(f"Row {row_no}: duration must be 1, 2, or 3 hours")
+    return hours
+
+
+def _subject_key(value):
+    return re.sub(r"[^A-Z0-9]+", "", _attendance_import_cell(value).upper())
+
+
+def _subject_name_key(value):
+    return " ".join(_attendance_import_cell(value).casefold().split())
+
+
+def _resolve_import_subject(c, *, semester_id, subject_code, subject_name, row_no):
+    code = _attendance_import_cell(subject_code)
+    name = _attendance_import_cell(subject_name)
+    if not code and not name:
+        raise ValueError(f"Row {row_no}: Subject Code or Subject Name is required")
+
+    # Historical attendance must be able to target a real subject that has
+    # since been deactivated. The subject's semester is the authoritative
+    # scope; `active` is a current-usage flag, not a historical-existence flag.
+    rows = c.execute(
+        "SELECT id, code, name FROM subjects WHERE semester_id=%s ORDER BY id",
+        (semester_id,),
+    ).fetchall()
+    if not rows:
+        raise ValueError("Selected semester has no subjects")
+
+    by_code = {str(r["code"]).strip().casefold(): r for r in rows}
+    by_code_norm = {_subject_key(r["code"]): r for r in rows if _subject_key(r["code"])}
+    exact_names: dict[str, list] = {}
+    for row in rows:
+        key = _subject_name_key(row["name"])
+        if key:
+            exact_names.setdefault(key, []).append(row)
+
+    code_match = None
+    name_match = None
+    if code:
+        code_match = by_code.get(code.casefold()) or by_code_norm.get(_subject_key(code))
+    if name:
+        name_candidates = exact_names.get(_subject_name_key(name), [])
+        if len(name_candidates) > 1:
+            raise ValueError(f"Row {row_no}: Subject Name is ambiguous in the selected semester; use Subject Code")
+        name_match = name_candidates[0] if name_candidates else None
+
+    if code_match and name_match and int(code_match["id"]) != int(name_match["id"]):
+        raise ValueError(f"Row {row_no}: Subject Code and Subject Name refer to different subjects")
+    if code_match:
+        return code_match
+    if name_match:
+        return name_match
+
+    # Deliberate second-stage tolerance: unique contains/fuzzy name match.
+    candidates = []
+    needle = _subject_name_key(name) if name else _attendance_import_cell(code).casefold()
+    if needle:
+        for row in rows:
+            code_text = str(row["code"]).casefold()
+            name_text = _subject_name_key(row["name"])
+            if needle in name_text or (code and needle in code_text):
+                candidates.append(row)
+        if len(candidates) == 1:
+            return candidates[0]
+
+        scored = []
+        for row in rows:
+            target = name_text = _subject_name_key(row["name"])
+            score = SequenceMatcher(None, needle, target).ratio()
+            if code:
+                score = max(score, SequenceMatcher(None, needle, str(row["code"]).casefold()).ratio())
+            if score >= 0.88:
+                scored.append((score, row))
+        scored.sort(key=lambda item: item[0], reverse=True)
+        if scored and (len(scored) == 1 or scored[0][0] > scored[1][0] + 0.03):
+            return scored[0][1]
+
+    display = code or name
+    raise ValueError(f"Row {row_no}: could not resolve subject '{display}' in the selected semester")
+
+
+def _hod_scoped_student(c, *, roll_no, hod_username):
+    return c.execute(
+        """
+        SELECT roll_no, name
+        FROM students
+        WHERE roll_no=%s
+          AND department='CSD'
+          AND active=1
+          AND LOWER(COALESCE(hod_username,''))=LOWER(%s)
+        LIMIT 1
+        """,
+        (roll_no, hod_username),
+    ).fetchone()
+
+
+def upload_attendance_excel(*, raw: bytes, filename: str, semester_id: int, hod_username: str) -> dict:
+    """Import historical attendance as one session per date/subject/type.
+
+    Import is an administrative backfill, so it intentionally writes
+    attendance_records directly instead of calling save_register(), which
+    protects the normal faculty 24-hour editing path. No absentee SMS is
+    queued for imported historical rows.
+    """
+    if not raw:
+        raise ValueError("No attendance file was selected")
+    if len(raw) > ATTENDANCE_IMPORT_MAX_BYTES:
+        raise ValueError("Attendance Excel file must be smaller than 10MB")
+    if Path(filename or "").suffix.lower() not in ATTENDANCE_IMPORT_ALLOWED_EXT:
+        raise ValueError("Attendance must be an .xlsx or .xlsm file")
+    if not hod_username:
+        raise ValueError("A HOD account is required")
+
+    try:
+        wb = load_workbook(io.BytesIO(raw), read_only=False, data_only=True)
+        ws = wb.active
+    except Exception as exc:
+        raise ValueError("The uploaded Excel file could not be read") from exc
+
+    try:
+        headers = [str(v or "").strip() for v in next(ws.iter_rows(min_row=1, max_row=1, values_only=True), [])]
+        mapping = match_headers(headers, ATTENDANCE_FIELD_SPECS)
+        missing = mapping.missing_required(ATTENDANCE_FIELD_SPECS)
+        if missing:
+            readable = {"roll_no": "Roll Number", "date": "Date", "status": "Status"}
+            raise ValueError("Missing required Excel columns: " + ", ".join(readable.get(x, x) for x in missing))
+        cols = mapping.field_index()
+
+        rows = []
+        with connect() as c:
+            sem = c.execute("SELECT id,code,name FROM academic_semesters WHERE id=%s", (semester_id,)).fetchone()
+            if not sem:
+                raise ValueError("Selected semester does not exist")
+
+            subject_cache: dict[tuple[str, str], dict] = {}
+            student_cache: dict[str, dict | None] = {}
+            seen_student_groups: set[tuple[str, str, int, str]] = set()
+            group_topics: dict[tuple[str, int, str], str] = {}
+            group_topic_explicit: set[tuple[str, int, str]] = set()
+            group_duration: dict[tuple[str, int, str], int] = {}
+            group_duration_explicit: set[tuple[str, int, str]] = set()
+            skipped_students: list[dict] = []
+
+            for excel_row_no, values in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+                if excel_row_no > ATTENDANCE_IMPORT_MAX_ROWS + 1:
+                    raise ValueError(f"Attendance sheet cannot contain more than {ATTENDANCE_IMPORT_MAX_ROWS} data rows")
+                vals = list(values)
+                get = lambda field: vals[cols[field]] if field in cols and cols[field] < len(vals) else None
+                raw_roll = _attendance_import_cell(get("roll_no"))
+                raw_date = get("date")
+                raw_code = get("subject_code")
+                raw_name = get("subject_name")
+                raw_status = get("status")
+                raw_type = get("session_type")
+                raw_duration = get("duration_hours")
+                raw_topic = get("topic")
+
+                if not any(v not in (None, "") for v in (raw_roll, raw_date, raw_code, raw_name, raw_status, raw_type, raw_duration, raw_topic)):
+                    continue
+                if not raw_roll:
+                    raise ValueError(f"Row {excel_row_no}: Roll Number is required")
+
+                attendance_date = _parse_import_date(raw_date, row_no=excel_row_no)
+                status = _parse_import_status(raw_status, row_no=excel_row_no)
+                session_type = _parse_import_session_type(raw_type, row_no=excel_row_no)
+                duration_hours = _parse_import_duration(raw_duration, session_type, row_no=excel_row_no)
+                topic_raw = _attendance_import_cell(raw_topic)
+                topic = topic_raw or "Imported attendance"
+                topic_is_explicit = bool(topic_raw)
+                if len(topic) > 300:
+                    raise ValueError(f"Row {excel_row_no}: topic must be 300 characters or fewer")
+                duration_is_explicit = raw_duration not in (None, "")
+
+                subject_key = (_attendance_import_cell(raw_code).casefold(), _subject_name_key(raw_name))
+                if subject_key not in subject_cache:
+                    subject_cache[subject_key] = _resolve_import_subject(
+                        c, semester_id=semester_id, subject_code=raw_code, subject_name=raw_name, row_no=excel_row_no,
+                    )
+                subject = subject_cache[subject_key]
+                student_key = raw_roll.casefold()
+                if student_key not in student_cache:
+                    student_cache[student_key] = _hod_scoped_student(c, roll_no=raw_roll, hod_username=hod_username)
+                student = student_cache[student_key]
+                if not student:
+                    skipped_students.append({"row": excel_row_no, "roll_no": raw_roll, "reason": "Student is not registered in this HOD's CSD scope"})
+                    continue
+
+                group_key = (attendance_date, int(subject["id"]), session_type)
+                topic_key = (attendance_date, int(subject["id"]), session_type)
+                previous_topic = group_topics.get(topic_key)
+                if topic_is_explicit:
+                    if topic_key in group_topic_explicit and previous_topic != topic:
+                        raise ValueError(f"Row {excel_row_no}: conflicting topics for the same date/subject/session type")
+                    group_topics[topic_key] = topic
+                    group_topic_explicit.add(topic_key)
+                elif previous_topic is None:
+                    group_topics[topic_key] = topic
+
+                previous_duration = group_duration.get(topic_key)
+                if duration_is_explicit:
+                    if topic_key in group_duration_explicit and previous_duration != duration_hours:
+                        raise ValueError(f"Row {excel_row_no}: conflicting durations for the same date/subject/session type")
+                    group_duration[topic_key] = duration_hours
+                    group_duration_explicit.add(topic_key)
+                elif previous_duration is None:
+                    group_duration[topic_key] = duration_hours
+
+                student_group_key = (attendance_date, str(subject["id"]), session_type, student_key)
+                if student_group_key in seen_student_groups:
+                    raise ValueError(f"Row {excel_row_no}: duplicate attendance row for {raw_roll} on {attendance_date} for {subject['code']}")
+                seen_student_groups.add(student_group_key)
+                rows.append({
+                    "row": excel_row_no,
+                    "roll_no": student["roll_no"],
+                    "date": attendance_date,
+                    "subject_id": int(subject["id"]),
+                    "subject_code": subject["code"],
+                    "session_type": session_type,
+                    "duration_hours": duration_hours,
+                    "topic": topic,
+                    "status": status,
+                })
+
+            if not rows and not skipped_students:
+                raise ValueError("No valid attendance rows were found in the Excel file")
+
+            grouped: dict[tuple[str, int, str], list[dict]] = {}
+            for item in rows:
+                grouped.setdefault((item["date"], item["subject_id"], item["session_type"]), []).append(item)
+
+            sessions_created = 0
+            sessions_existing = 0
+            records_written = 0
+            students_affected = {item["roll_no"] for item in rows}
+
+            # One transaction covers the whole import: a bad DB write cannot
+            # leave half of a historical sheet committed.
+            for (attendance_date, subject_id, session_type), items in grouped.items():
+                existing = c.execute(
+                    "SELECT id, topic, duration_hours FROM attendance_sessions WHERE attendance_date=%s AND subject_id=%s AND faculty_username=%s AND session_type=%s",
+                    (attendance_date, subject_id, hod_username, session_type),
+                ).fetchone()
+                if existing:
+                    session_id = int(existing["id"])
+                    existing_topic = _attendance_import_cell(existing.get("topic"))
+                    existing_duration = int(existing.get("duration_hours") or 1)
+                    if (attendance_date, subject_id, session_type) in group_topic_explicit and existing_topic != group_topics[(attendance_date, subject_id, session_type)]:
+                        raise ValueError(
+                            f"Conflicting topic for existing attendance session on {attendance_date} for subject {items[0]['subject_code']}"
+                        )
+                    if (attendance_date, subject_id, session_type) in group_duration_explicit and existing_duration != group_duration[(attendance_date, subject_id, session_type)]:
+                        raise ValueError(
+                            f"Conflicting duration for existing attendance session on {attendance_date} for subject {items[0]['subject_code']}"
+                        )
+                    updates = []
+                    params = []
+                    if (attendance_date, subject_id, session_type) in group_topic_explicit:
+                        updates.append("topic=%s")
+                        params.append(group_topics[(attendance_date, subject_id, session_type)])
+                    if (attendance_date, subject_id, session_type) in group_duration_explicit:
+                        updates.append("duration_hours=%s")
+                        params.append(group_duration[(attendance_date, subject_id, session_type)])
+                    if updates:
+                        params.append(session_id)
+                        c.execute(
+                            f"UPDATE attendance_sessions SET {', '.join(updates)}, updated_at=CURRENT_TIMESTAMP WHERE id=%s",
+                            tuple(params),
+                        )
+                    sessions_existing += 1
+                else:
+                    subject = c.execute("SELECT code, name FROM subjects WHERE id=%s", (subject_id,)).fetchone()
+                    if not subject:
+                        raise ValueError(f"Subject {subject_id} was removed during import")
+                    session = get_or_create_session(
+                        attendance_date=attendance_date,
+                        semester_id=semester_id,
+                        subject_id=subject_id,
+                        faculty_username=hod_username,
+                        session_type=session_type,
+                        duration_hours=items[0]["duration_hours"],
+                        topic=items[0]["topic"],
+                        actor=hod_username,
+                        connection=c,
+                    )
+                    session_id = int(session["id"])
+                    sessions_created += 1
+
+                for item in items:
+                    c.execute(
+                        """
+                        INSERT INTO attendance_records(session_id,roll_no,status,marked_by)
+                        VALUES(%s,%s,%s,%s)
+                        ON DUPLICATE KEY UPDATE status=VALUES(status), marked_by=VALUES(marked_by), updated_at=CURRENT_TIMESTAMP
+                        """,
+                        (session_id, item["roll_no"], item["status"], hod_username),
+                    )
+                    records_written += 1
+                c.execute("UPDATE attendance_sessions SET saved_at=CURRENT_TIMESTAMP WHERE id=%s", (session_id,))
+
+            audit(c, hod_username, "IMPORT", "attendance",
+                  f"{sem['code']} — {len(rows)} records / {len(grouped)} sessions; skipped={len(skipped_students)}")
+
+        return {
+            "semester_id": int(semester_id),
+            "semester_code": sem["code"],
+            "sessions_created": sessions_created,
+            "sessions_updated": sessions_existing,
+            "records_written": records_written,
+            "students_affected": len(students_affected),
+            "skipped_students": skipped_students,
+            "skipped_count": len(skipped_students),
+            "column_mapping": mapping.as_dict(),
+        }
+    finally:
+        wb.close()
+
+
+def build_attendance_template() -> bytes:
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Attendance"
+    headers = ["Roll No", "Date", "Subject Code", "Subject Name", "Status", "Session Type", "Duration Hours", "Topic"]
+    sample = ["24CSD0001", date.today().strftime("%Y-%m-%d"), "24CS301PC", "Data Structures", "P", "CLASS", 1, "Imported attendance"]
+    for col, value in enumerate(headers, 1):
+        cell = ws.cell(1, col, value)
+        cell.font = Font(bold=True)
+        cell.fill = PatternFill("solid", fgColor="DCEBFA")
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+    for col, value in enumerate(sample, 1):
+        ws.cell(2, col, value)
+    ws.freeze_panes = "A2"
+    widths = [18, 14, 18, 28, 14, 16, 18, 30]
+    for index, width in enumerate(widths, 1):
+        ws.column_dimensions[get_column_letter(index)].width = width
+    ws.auto_filter.ref = "A1:H2"
+
+    guide = wb.create_sheet("Instructions")
+    guide_rows = [
+        ["Field", "Required", "Accepted / Notes"],
+        ["Roll No", "Yes", "Roll No / Roll Number / Hall Ticket / HT No"],
+        ["Date", "Yes", "YYYY-MM-DD preferred; common Indian date formats are accepted"],
+        ["Subject Code", "One of code/name", "Exact code match first; tolerant unique matching follows"],
+        ["Subject Name", "One of code/name", "Use the official subject name when code is unavailable"],
+        ["Status", "Yes", "Present/Absent, P/A, 1/0, Yes/No"],
+        ["Session Type", "No", "CLASS or LAB; defaults to CLASS"],
+        ["Duration Hours", "No", "1, 2, or 3 for CLASS; LAB is always forced to 3"],
+        ["Topic", "No", "Defaults to Imported attendance; maximum 300 characters"],
+    ]
+    for r, values in enumerate(guide_rows, 1):
+        for cidx, value in enumerate(values, 1):
+            guide.cell(r, cidx, value)
+            if r == 1:
+                guide.cell(r, cidx).font = Font(bold=True)
+                guide.cell(r, cidx).fill = PatternFill("solid", fgColor="DCEBFA")
+    for col, width in enumerate([20, 18, 76], 1):
+        guide.column_dimensions[get_column_letter(col)].width = width
+    out = io.BytesIO()
+    wb.save(out)
+    wb.close()
+    return out.getvalue()
 
 
 def validate_session_payload(*, attendance_date, semester_id, subject_id, faculty_username,
@@ -329,13 +800,13 @@ def set_subject_faculty(*, subject_id, faculty_usernames, actor):
 
 
 def get_or_create_session(*, attendance_date, semester_id, subject_id, faculty_username,
-                          session_type, duration_hours, topic, actor):
+                          session_type, duration_hours, topic, actor, connection=None):
     session_type, duration_hours, topic = validate_session_payload(
         attendance_date=attendance_date, semester_id=semester_id, subject_id=subject_id,
         faculty_username=faculty_username, session_type=session_type,
         duration_hours=duration_hours, topic=topic,
     )
-    with connect() as c:
+    with (nullcontext(connection) if connection is not None else connect()) as c:
         faculty = c.execute(
             "SELECT username, role, department, hod_username FROM users WHERE username=%s AND active=1",
             (faculty_username,),
@@ -372,13 +843,25 @@ def get_or_create_session(*, attendance_date, semester_id, subject_id, faculty_u
                 c.execute("UPDATE attendance_sessions SET hod_username=%s WHERE id=%s", (hod_username, row["id"]))
                 row = c.execute("SELECT * FROM attendance_sessions WHERE id=%s", (row["id"],)).fetchone()
             return row
-        cur = c.execute("""
-            INSERT INTO attendance_sessions(
-                attendance_date,semester_id,subject_id,faculty_username,hod_username,
-                session_type,duration_hours,topic,created_by
-            ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)
-        """, (attendance_date, semester_id, subject_id, faculty_username, hod_username,
-              session_type, duration_hours, topic, actor))
+        try:
+            cur = c.execute("""
+                INSERT INTO attendance_sessions(
+                    attendance_date,semester_id,subject_id,faculty_username,hod_username,
+                    session_type,duration_hours,topic,created_by
+                ) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            """, (attendance_date, semester_id, subject_id, faculty_username, hod_username,
+                  session_type, duration_hours, topic, actor))
+        except IntegrityError:
+            # Concurrent register opens can race between SELECT and INSERT.
+            # The unique key is the final authority; fetch the row created by
+            # the winner instead of surfacing a duplicate-key 500.
+            row = c.execute("""
+                SELECT * FROM attendance_sessions
+                WHERE attendance_date=%s AND subject_id=%s AND faculty_username=%s AND session_type=%s
+            """, (attendance_date, subject_id, faculty_username, session_type)).fetchone()
+            if row:
+                return row
+            raise
         audit(c, actor, "CREATE", "attendance_session",
               f"session={cur.lastrowid}; subject={subject_id}; type={session_type}; hours={duration_hours}")
         return c.execute("SELECT * FROM attendance_sessions WHERE id=%s", (cur.lastrowid,)).fetchone()
@@ -432,7 +915,7 @@ def load_register(session_id):
             SELECT st.roll_no, st.name
             FROM students st
             WHERE st.department='CSD'
-              AND (st.hod_username=%s OR st.hod_username IS NULL)
+              AND LOWER(COALESCE(st.hod_username,''))=LOWER(%s)
               AND st.active=1
               AND st.current_semester_id=%s
             ORDER BY st.roll_no
@@ -452,7 +935,7 @@ def load_register(session_id):
                     SELECT st.roll_no, st.name
                     FROM students st
                     WHERE st.department='CSD'
-                      AND (st.hod_username=%s OR st.hod_username IS NULL)
+                      AND LOWER(COALESCE(st.hod_username,''))=LOWER(%s)
                       AND st.active=1
                       AND st.current_semester_id=%s
                     ORDER BY st.roll_no
@@ -610,7 +1093,7 @@ def month_register(*, faculty_username, semester_id, subject_id, year, month):
             SELECT DISTINCT st.roll_no, st.name, st.current_semester_id
             FROM students st
             WHERE st.department='CSD'
-              AND (st.hod_username=%s OR st.hod_username IS NULL OR %s='admin')
+              AND (LOWER(COALESCE(st.hod_username,''))=LOWER(%s) OR %s='admin')
               AND st.active=1
               AND st.current_semester_id=%s
             ORDER BY st.roll_no

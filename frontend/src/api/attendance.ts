@@ -2,7 +2,7 @@
 // this file in lockstep with that module; if a response shape changes
 // there, update the types here in the same change (same rule as auth.ts
 // and dashboard.ts).
-import { apiFetch, getAuthUrl } from "./client";
+import { apiFetch, apiUpload, getAuthUrl } from "./client";
 
 // ──────────────────────────────────────────────
 // Shared types
@@ -271,3 +271,56 @@ export function getSemesterAttendanceSummary(params: { semesterId: number; year?
   return apiFetch<SemesterAttendanceSummaryResponse>(`/api/attendance/semester-summary?${q.toString()}`);
 }
 
+
+// ── Historical attendance bulk import (HOD) ─────────────────────────
+export interface AttendanceImportOptions {
+  semesters: Array<{ id: number; code: string; name: string; active: boolean }>;
+}
+
+export interface AttendanceImportResult {
+  semester_id: number;
+  semester_code: string;
+  sessions_created: number;
+  sessions_updated: number;
+  records_written: number;
+  students_affected: number;
+  skipped_count: number;
+  skipped_students: Array<{ row: number; roll_no: string; reason?: string }>;
+  column_mapping: {
+    mapped: Array<{ header: string; field: string; matched_via?: string }>;
+    ignored: string[];
+  };
+}
+
+export function getAttendanceImportOptions() {
+  return apiFetch<AttendanceImportOptions>("/api/attendance/bulk-import/options");
+}
+
+export function uploadAttendanceImport(semesterId: number, file: File) {
+  return apiUpload<AttendanceImportResult>(
+    `/api/attendance/bulk-import?semester_id=${semesterId}`,
+    file,
+    "file",
+  );
+}
+
+// ── Per-student, per-subject dates (Insights drill-down) ────────────
+export interface StudentSubjectDate {
+  attendance_date: string;
+  session_type: SessionType;
+  duration_hours: number;
+  status: string;
+}
+
+export interface StudentSubjectDatesResponse {
+  student: { roll_no: string; name: string };
+  subject: { id: number; code: string; name: string };
+  semester_id: number;
+  dates: StudentSubjectDate[];
+}
+
+export function getStudentSubjectDates(params: { rollNo: string; subjectId: number; semesterId: number }) {
+  return apiFetch<StudentSubjectDatesResponse>(
+    `/api/attendance/student/${encodeURIComponent(params.rollNo)}/subject/${params.subjectId}/dates?semester_id=${params.semesterId}`,
+  );
+}

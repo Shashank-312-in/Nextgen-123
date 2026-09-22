@@ -4,7 +4,7 @@ import { type CurrentUser, logout } from "../api/auth";
 import { navItemsFor } from "../nav";
 import { getMySmsAccess } from "../api/logs";
 import { ReportProblemModal } from "./ReportProblemModal";
-import { ProfileAvatar } from "./ProfileAvatar";
+import { ClassReminders } from "./ClassReminders";
 
 interface AppShellProps {
   user: CurrentUser;
@@ -114,18 +114,12 @@ export function AppShell({ user, activeNav, heading, whoami, onLoggedOut, childr
         </nav>
 
         <div className="ng-sidebar-bottom">
-          <div className="ng-user-card">
-            <ProfileAvatar username={user.username} />
-            <div className="ng-user-copy">
-              <strong>{user.username}</strong>
-              <span>{role}</span>
-            </div>
-          </div>
           <button className="ng-sidebar-action" type="button" onClick={() => setIsReportModalOpen(true)}>Report a problem</button>
           <button className="ng-sidebar-action danger" type="button" onClick={handleLogout}>Log out</button>
         </div>
       </aside>
 
+      {user.role === "FACULTY" && <ClassReminders />}
       <main className="main-area ng-main">
         <header className="main-top ng-topbar">
           <div className="ng-mobile-brand">

@@ -221,6 +221,15 @@ async def student_subject_history(
     })
 
 
+@router.get("/notifications/pending")
+async def pending_class_notifications(user: CurrentUser = Depends(get_current_user)):
+    if user.role != "FACULTY":
+        return ok({"notifications": []})
+    from sms_app.services.timetable_service import claim_due_notifications
+    rows = claim_due_notifications(faculty_username=user.username, limit=1)
+    return ok({"notifications": [dict(row) for row in rows]})
+
+
 # ──────────────────────────────────────────────
 # Audit Log & SMS Log (HOD only)
 # ──────────────────────────────────────────────

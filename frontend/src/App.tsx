@@ -12,6 +12,7 @@ import { StudentDashboard } from "./pages/dashboard/StudentDashboard";
 import { AttendanceSetupPage } from "./pages/attendance/AttendanceSetupPage";
 import { AttendanceRegisterPage } from "./pages/attendance/AttendanceRegisterPage";
 import { AttendanceInsightsPage } from "./pages/attendance/AttendanceInsightsPage";
+import { AttendanceImportPage } from "./pages/attendance/AttendanceImportPage";
 import { MonthlyAttendancePage } from "./pages/attendance/MonthlyAttendancePage";
 import { StudentsListPage } from "./pages/students/StudentsListPage";
 import { StudentFormPage } from "./pages/students/StudentFormPage";
@@ -118,6 +119,14 @@ export function App() {
         element={
           <Guard user={user} reload={reload} condition={user?.role !== "STUDENT"} fallback="/">
             <AttendanceInsightsPage user={user!} onLoggedOut={handleLoggedOut} />
+          </Guard>
+        }
+      />
+      <Route
+        path="/attendance/import"
+        element={
+          <Guard user={user} reload={reload} condition={user?.role === "HOD"} fallback="/attendance">
+            <AttendanceImportPage user={user!} onLoggedOut={handleLoggedOut} />
           </Guard>
         }
       />

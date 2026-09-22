@@ -1,0 +1,40 @@
+.ds-panel{margin:0 0 14px;border:1px solid var(--ng-line);border-radius:10px;background:var(--ng-surface)}
+.ds-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 14px;border-bottom:1px solid var(--ng-line)}
+.ds-title h3{margin:0;font-size:15px;color:var(--ng-text)}
+.ds-title p{margin:2px 0 0;font-size:12px;color:var(--ng-muted)}
+.ds-stepper{display:flex;align-items:center;gap:6px}
+.ds-stepper .ng-flat-input{width:150px}
+.ds-stepper .ng-flat-btn{min-width:40px;padding:0 10px}
+.ds-state{padding:22px 14px;text-align:center;font-size:14px;color:var(--ng-muted)}
+.ds-state.is-error{color:var(--ng-red)}
+.ds-list{margin:0;padding:0;list-style:none}
+.ds-row{display:grid;grid-template-columns:96px 1fr auto;gap:12px;align-items:center;padding:11px 14px;border-bottom:1px solid var(--ng-line)}
+.ds-row:last-child{border-bottom:0}
+.ds-time{font-size:13px;font-weight:700;color:var(--ng-text)}
+.ds-time small{display:block;font-weight:500;color:var(--ng-muted);font-size:11px}
+.ds-main{min-width:0}
+.ds-subject{font-size:14px;font-weight:700;color:var(--ng-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ds-meta{margin-top:2px;font-size:12px;color:var(--ng-muted)}
+.ds-meta .is-sub{color:var(--ng-amber);font-weight:700}
+.ds-meta s{color:var(--ng-soft)}
+.ds-actions{display:flex;gap:6px}
+.ds-scrim{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(23,33,43,.45)}
+.ds-dialog{width:100%;max-width:420px;border-radius:12px;background:var(--ng-surface);padding:16px;box-shadow:0 12px 32px rgba(23,33,43,.2)}
+.ds-dialog h4{margin:0 0 2px;font-size:16px;color:var(--ng-text)}
+.ds-dialog .ds-meta{margin:0 0 14px}
+.ds-field{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+.ds-field label{font-size:12px;font-weight:700;color:var(--ng-muted)}
+.ds-field .ng-flat-select,.ds-field .ng-flat-input{width:100%}
+.ds-err{margin:0 0 10px;font-size:13px;color:var(--ng-red)}
+.ds-dialog-actions{display:flex;justify-content:flex-end;gap:8px}
+@media (max-width:640px){
+  .ds-head{align-items:stretch}
+  .ds-stepper{width:100%}.ds-stepper .ng-flat-input{flex:1;width:auto}
+  .ds-row{grid-template-columns:1fr auto;grid-template-areas:"time act" "main main";row-gap:4px}
+  .ds-row .ds-time{grid-area:time;display:flex;gap:8px;align-items:baseline}.ds-row .ds-time small{display:inline}
+  .ds-row .ds-actions{grid-area:act}.ds-row .ds-main{grid-area:main}
+  .ds-subject{white-space:normal}
+  .ds-scrim{align-items:flex-end;padding:0}
+  .ds-dialog{max-width:none;border-radius:14px 14px 0 0;padding:16px 16px 20px}
+  .ds-dialog-actions .ng-flat-btn{flex:1;min-height:46px}
+}

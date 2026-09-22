@@ -1,0 +1,58 @@
+.ai-wrap{max-width:1100px;margin:0 auto;padding:4px 0 24px}
+.ai-head{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+.ai-back{border:0;background:none;padding:0;margin-bottom:4px;color:var(--ng-navy-2);font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.ai-head h2{margin:0;font-size:20px;color:var(--ng-text)}
+.ai-sub{margin:2px 0 0;font-size:13px;color:var(--ng-muted)}
+.ai-ctx{display:flex;flex-direction:column;gap:4px;min-width:220px}
+.ai-ctx label{font-size:12px;font-weight:700;color:var(--ng-muted)}
+.ai-metrics{margin-bottom:14px}
+.ai-panel{border:1px solid var(--ng-line);border-radius:10px;background:var(--ng-surface);overflow:hidden}
+.ai-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-bottom:1px solid var(--ng-line);flex-wrap:wrap}
+.ai-toolbar strong{font-size:14px;color:var(--ng-text)}
+.ai-toolbar .ng-flat-input{width:240px;max-width:100%}
+.ai-state{padding:36px 16px;text-align:center;color:var(--ng-muted);font-size:14px}
+.ai-state.is-error{color:var(--ng-red)}
+/* Header + rows share one grid so columns always align */
+.ai-headrow,.ai-row{display:grid;grid-template-columns:24px 120px 1fr 72px 72px 100px;align-items:center}
+.ai-headrow{padding:10px 14px;background:var(--ng-surface-2);border-bottom:1px solid var(--ng-line);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--ng-muted)}
+.ai-headrow .num{text-align:right}
+.ai-item{border-bottom:1px solid var(--ng-line)}
+.ai-item:last-child{border-bottom:0}
+.ai-row{width:100%;padding:12px 14px;border:0;background:none;font:inherit;font-size:14px;color:var(--ng-text);text-align:left;cursor:pointer}
+.ai-row:hover{background:var(--ng-surface-2)}
+.ai-row:focus-visible{outline:2px solid var(--ng-accent);outline-offset:-2px}
+.ai-row .num{text-align:right;color:var(--ng-muted)}
+.ai-chev{display:inline-block;width:12px;text-align:center;color:var(--ng-soft);font-size:11px;line-height:1;transition:transform .12s}
+.ai-row[aria-expanded="true"] .ai-chev{transform:rotate(90deg)}
+.ai-roll{color:var(--ng-muted);font-weight:700;font-size:13px}
+.ai-name{font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ai-chip{display:inline-flex;justify-content:center;min-width:54px;padding:3px 8px;border-radius:6px;font-size:12px;font-weight:800}
+.ai-chip.green{background:var(--ng-green-soft);color:var(--ng-green)}
+.ai-chip.yellow{background:var(--ng-amber-soft);color:var(--ng-amber)}
+.ai-chip.red{background:var(--ng-red-soft);color:var(--ng-red)}
+.ai-chip.muted{background:var(--ng-surface-2);color:var(--ng-muted)}
+.ai-detail{padding:4px 14px 12px 42px;background:var(--ng-surface-2);border-top:1px solid var(--ng-line)}
+.ai-subrow{display:grid;grid-template-columns:22px 1fr 90px 90px;align-items:center;width:100%;padding:9px 0;border:0;border-bottom:1px solid var(--ng-line);background:none;font:inherit;font-size:13px;color:var(--ng-text);text-align:left;cursor:pointer}
+.ai-subrow:last-child{border-bottom:0}
+.ai-subrow.is-empty{color:var(--ng-soft)}
+.ai-subrow .num{text-align:right;color:var(--ng-muted)}
+.ai-subrow[aria-expanded="true"] .ai-chev{transform:rotate(90deg)}
+.ai-dates{display:flex;flex-wrap:wrap;gap:6px;padding:8px 0 10px 22px}
+.ai-date{padding:3px 8px;border-radius:6px;border:1px solid var(--ng-line);background:var(--ng-surface);font-size:12px;color:var(--ng-text)}
+.ai-date.is-absent{background:var(--ng-red-soft);border-color:transparent;color:var(--ng-red);font-weight:700}
+.ai-date.is-present{background:var(--ng-green-soft);border-color:transparent;color:var(--ng-green)}
+.ai-cards{display:none}
+@media (max-width:720px){
+  .ai-desktop{display:none}
+  .ai-cards{display:block}
+  .ai-head{align-items:stretch}
+  .ai-ctx{width:100%}
+  .ai-toolbar .ng-flat-input{width:100%}
+  .ai-card{border-bottom:1px solid var(--ng-line)}
+  .ai-card:last-child{border-bottom:0}
+  .ai-card-top{display:flex;align-items:center;gap:10px;width:100%;padding:12px 14px;border:0;background:none;font:inherit;text-align:left;cursor:pointer;min-height:56px}
+  .ai-card-main{flex:1;min-width:0}
+  .ai-card-main .ai-name{display:block;font-size:14px}
+  .ai-card-main .ai-roll{font-size:12px}
+  .ai-detail{padding:4px 14px 12px}
+}

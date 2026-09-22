@@ -36,7 +36,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, UploadFile, File
 from fastapi.responses import Response
 from pydantic import BaseModel
 
@@ -53,12 +53,17 @@ from sms_app.services.attendance_service import (
     session_is_editable,
     subject_details,
     validate_session_payload,
+    list_all_semesters,
+    upload_attendance_excel,
+    build_attendance_template,
 )
 from sms_app.services.attendance_pdf import build_attendance_pdf
 from sms_app.services.sms_service import queue_absentees_for_session
+from database import connect
 
 from api.deps import CurrentUser, get_current_user
 from api.envelope import ApiError, ok
+from sms_app.services.timetable_service import faculty_subject_scheduled_today
 
 router = APIRouter(prefix="/api/attendance", tags=["attendance"])
 
@@ -96,6 +101,18 @@ def _require_owner_or_hod(user: CurrentUser, session) -> None:
         raise ApiError("This session belongs to another HOD scope", status_code=403, code="FORBIDDEN")
     if user.role == "HOD" and not session.get("hod_username"):
         raise ApiError("This session has no HOD ownership assigned", status_code=403, code="FORBIDDEN")
+
+
+def _require_hod(user: CurrentUser) -> None:
+    if user.role != "HOD":
+        raise ApiError("HOD access only", status_code=403, code="FORBIDDEN")
+
+
+def _parse_iso_date_or_400(value: str):
+    try:
+        return date.fromisoformat(value)
+    except (TypeError, ValueError):
+        raise ApiError("Select a valid date", status_code=400, code="VALIDATION_ERROR")
 
 
 def _serialize_session(session) -> dict:
@@ -292,24 +309,50 @@ async def semester_attendance_summary(
         if not sem:
             raise ApiError("Semester not found", 404, "NOT_FOUND")
 
+        # Historical semester views must retain subjects that were real for the
+        # selected term even if they are now inactive. Current active subjects
+        # remain included automatically.
         subjects = c.execute(
-            "SELECT id, code, name, has_lab FROM subjects WHERE semester_id=%s AND active=1 ORDER BY name",
-            (semester_id,),
+            """
+            SELECT DISTINCT s.id, s.code, s.name, s.has_lab
+            FROM subjects s
+            WHERE s.semester_id=%s
+              AND (s.active=1 OR EXISTS (
+                    SELECT 1 FROM attendance_sessions ah
+                    WHERE ah.subject_id=s.id AND ah.semester_id=%s
+              ))
+            ORDER BY s.name
+            """,
+            (semester_id, semester_id),
         ).fetchall()
 
-        hod_scope = user.username if user.role == "HOD" else None
-        if not hod_scope and user.role != "ADMIN":
+        scope_sql = ""
+        scope_params: list = [semester_id, semester_id]
+        if user.role == "ADMIN":
+            pass
+        else:
             from api.routes_students import _get_user_hod_username
-            hod_scope = _get_user_hod_username(user.username)
+            hod_scope = user.username if user.role == "HOD" else _get_user_hod_username(user.username)
+            if not hod_scope:
+                return ok({"semester": dict(sem), "subjects": [dict(s) for s in subjects], "students": [], "year": year, "month": month})
+            scope_sql = " AND LOWER(COALESCE(s.hod_username,''))=LOWER(%s)"
+            scope_params.append(hod_scope)
 
         students = c.execute(
-            """
-            SELECT roll_no, name FROM students
-            WHERE current_semester_id=%s AND department='CSD' AND active=1
-              AND (hod_username=%s OR %s IS NULL OR %s='admin')
-            ORDER BY roll_no
+            f"""
+            SELECT DISTINCT s.roll_no, s.name
+            FROM students s
+            WHERE s.department='CSD' AND s.active=1
+              AND (s.current_semester_id=%s OR EXISTS (
+                    SELECT 1
+                    FROM attendance_records ar
+                    JOIN attendance_sessions ah ON ah.id=ar.session_id
+                    WHERE ar.roll_no=s.roll_no AND ah.semester_id=%s
+              ))
+              {scope_sql}
+            ORDER BY s.roll_no
             """,
-            (semester_id, hod_scope, hod_scope, user.username),
+            tuple(scope_params),
         ).fetchall()
 
         # Fetch attendance session records grouped by student and subject
@@ -383,6 +426,51 @@ async def semester_attendance_summary(
 
 
 # ──────────────────────────────────────────────
+# Historical attendance bulk import (HOD only)
+# ──────────────────────────────────────────────
+
+@router.get("/bulk-import/options")
+async def attendance_bulk_import_options(user: CurrentUser = Depends(get_current_user)):
+    _require_hod(user)
+    return ok({
+        "semesters": [
+            {"id": int(s["id"]), "code": s["code"], "name": s["name"], "active": bool(s["active"])}
+            for s in list_all_semesters()
+        ]
+    })
+
+
+@router.get("/bulk-import/template")
+async def attendance_bulk_import_template(user: CurrentUser = Depends(get_current_user)):
+    _require_hod(user)
+    return Response(
+        content=build_attendance_template(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="NextGen-attendance-template.xlsx"'},
+    )
+
+
+@router.post("/bulk-import")
+async def attendance_bulk_import(
+    semester_id: int = Query(...),
+    file: UploadFile = File(...),
+    user: CurrentUser = Depends(get_current_user),
+):
+    _require_hod(user)
+    try:
+        raw = await file.read()
+        result = upload_attendance_excel(
+            raw=raw,
+            filename=file.filename or "attendance.xlsx",
+            semester_id=semester_id,
+            hod_username=user.username,
+        )
+        return ok(result)
+    except ValueError as exc:
+        raise ApiError(str(exc), status_code=400, code="VALIDATION_ERROR")
+
+
+# ──────────────────────────────────────────────
 # POST /api/attendance/sessions — open (get-or-create) a session
 # ──────────────────────────────────────────────
 
@@ -395,6 +483,83 @@ class OpenSessionBody(BaseModel):
     topic: str
 
 
+@router.get("/student/{roll_no}/subject/{subject_id}/dates")
+async def student_subject_attendance_dates(
+    roll_no: str,
+    subject_id: int,
+    semester_id: int = Query(...),
+    user: CurrentUser = Depends(get_current_user),
+):
+    _require_staff(user)
+    roll_no = roll_no.strip()
+    if not roll_no:
+        raise ApiError("Roll number is required", status_code=400, code="VALIDATION_ERROR")
+
+    with connect() as c:
+        subject = c.execute(
+            "SELECT id, code, name, semester_id FROM subjects WHERE id=%s",
+            (subject_id,),
+        ).fetchone()
+        if not subject:
+            raise ApiError("Subject not found", status_code=404, code="NOT_FOUND")
+        if int(subject["semester_id"]) != int(semester_id):
+            raise ApiError("Subject does not belong to the selected semester", status_code=400, code="VALIDATION_ERROR")
+
+        student = c.execute(
+            "SELECT roll_no, name, department, hod_username FROM students WHERE roll_no=%s AND active=1",
+            (roll_no,),
+        ).fetchone()
+        if not student:
+            raise ApiError("Student not found", status_code=404, code="NOT_FOUND")
+        if str(student.get("department") or "CSD").upper() != str(getattr(user, "department", "CSD") or "CSD").upper():
+            raise ApiError("Student is outside your department scope", status_code=403, code="FORBIDDEN")
+
+        if user.role == "HOD":
+            owner = str(student.get("hod_username") or "").casefold()
+            if not owner or owner != user.username.casefold():
+                raise ApiError("Student is outside your HOD scope", status_code=403, code="FORBIDDEN")
+        elif user.role == "FACULTY":
+            assigned = c.execute(
+                "SELECT 1 FROM subject_faculty WHERE subject_id=%s AND faculty_username=%s",
+                (subject_id, user.username),
+            ).fetchone()
+            if not assigned:
+                raise ApiError("This subject is not assigned to the selected faculty account", status_code=403, code="FORBIDDEN")
+            faculty = c.execute(
+                "SELECT hod_username FROM users WHERE username=%s AND role='FACULTY' AND active=1",
+                (user.username,),
+            ).fetchone()
+            faculty_hod = str((faculty or {}).get("hod_username") or "").casefold()
+            if not faculty_hod or str(student.get("hod_username") or "").casefold() != faculty_hod:
+                raise ApiError("Student is outside your faculty scope", status_code=403, code="FORBIDDEN")
+
+        rows = c.execute(
+            """
+            SELECT a.attendance_date, a.session_type, a.duration_hours, r.status
+            FROM attendance_records r
+            JOIN attendance_sessions a ON a.id=r.session_id
+            WHERE r.roll_no=%s AND a.subject_id=%s AND a.semester_id=%s
+            ORDER BY a.attendance_date ASC, a.id ASC
+            """,
+            (roll_no, subject_id, semester_id),
+        ).fetchall()
+
+    return ok({
+        "student": {"roll_no": student["roll_no"], "name": student["name"]},
+        "subject": {"id": int(subject["id"]), "code": subject["code"], "name": subject["name"]},
+        "semester_id": int(semester_id),
+        "dates": [
+            {
+                "attendance_date": str(row["attendance_date"]),
+                "session_type": row["session_type"],
+                "duration_hours": int(row["duration_hours"] or 1),
+                "status": row["status"],
+            }
+            for row in rows
+        ],
+    })
+
+
 @router.post("/sessions")
 async def open_session(
     body: OpenSessionBody,
@@ -405,10 +570,18 @@ async def open_session(
     subject = subject_details(body.subject_id)
     if not subject:
         raise ApiError("Select a valid subject", status_code=400, code="VALIDATION_ERROR")
+    if int(subject["semester_id"]) != int(body.semester_id):
+        raise ApiError("Selected subject does not belong to the selected semester", status_code=400, code="VALIDATION_ERROR")
     sess_type = body.session_type.upper()
     duration_hours = 3 if sess_type == "LAB" else body.duration_hours
 
     try:
+        if user.role == "FACULTY":
+            target_date = _parse_iso_date_or_400(body.attendance_date)
+            if not faculty_subject_scheduled_today(
+                faculty_username=user.username, subject_id=body.subject_id, target_date=target_date
+            ):
+                raise ValueError("This subject is not scheduled for the selected date")
         validate_session_payload(
             attendance_date=body.attendance_date, semester_id=body.semester_id,
             subject_id=body.subject_id, faculty_username=user.username,
