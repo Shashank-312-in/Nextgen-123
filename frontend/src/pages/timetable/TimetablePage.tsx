@@ -21,6 +21,7 @@ import {
 import { DaySchedulePanel } from "./DaySchedulePanel";
 import "../../styles/ng-flat-controls.css";
 import "./timetable.css";
+import { ScheduleView } from "./ScheduleView";
 
 interface Props { user: CurrentUser; onLoggedOut: () => void; }
 
@@ -70,6 +71,7 @@ function canPlace(entries: DraftEntry[], candidate: Pick<DraftEntry, "day" | "se
 export function TimetablePage({ user, onLoggedOut }: Props) {
   const isBuilder = user.role === "HOD" || user.role === "ADMIN";
   const [data, setData] = useState<TimetablePageData | null>(null);
+  const [showBuilder, setShowBuilder] = useState(user.role === "ADMIN");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -309,6 +311,8 @@ export function TimetablePage({ user, onLoggedOut }: Props) {
 
   if (loading) return <AppShell user={user} activeNav="timetable" heading="Timetable" onLoggedOut={onLoggedOut}><p className="empty-note">Loading timetable workspace…</p></AppShell>;
 
+  if ((user.role === "HOD" || user.role === "FACULTY") && !showBuilder) return <AppShell user={user} activeNav="timetable" heading="Schedule" onLoggedOut={onLoggedOut}><ScheduleView user={user} onManage={()=>setShowBuilder(true)} /></AppShell>;
+
   if (!isBuilder) {
     const records = filteredViewer;
     const viewer = records.find(t => t.semester_id === viewerSemesterId) || viewerRecord;
@@ -325,6 +329,7 @@ export function TimetablePage({ user, onLoggedOut }: Props) {
   return <AppShell user={user} activeNav="timetable" heading="Timetable Builder" onLoggedOut={onLoggedOut}>
     <ErrorPopup message={error} onClose={()=>setError(null)} />{notice&&<ToastPopup type="success" message={notice} onClose={()=>setNotice(null)}/>} 
     <div className="timetable-page">
+      {user.role === "HOD" && <button type="button" className="ng-flat-btn ng-flat-btn-outline" onClick={()=>setShowBuilder(false)}>← Back to Schedule</button>}
       <DaySchedulePanel faculty={data?.faculty ?? []} onNotice={setNotice} />
       <div className="timetable-toolbar">
         <div><div className="tt-inline-note">Compose the schedule as blocks. Drag a block onto a period, set its duration, then publish once it passes conflict checks.</div></div>

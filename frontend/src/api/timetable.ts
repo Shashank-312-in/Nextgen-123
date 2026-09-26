@@ -103,11 +103,15 @@ export async function getTimetables(params: {
   semester_id?: number;
   section?: string;
   academic_year?: string;
+  scope?: string;
+  schedule_view?: boolean;
 } = {}): Promise<TimetablePageData> {
   const search = new URLSearchParams();
   if (params.semester_id) search.set("semester_id", String(params.semester_id));
   if (params.section) search.set("section", params.section);
   if (params.academic_year) search.set("academic_year", params.academic_year);
+  if (params.scope) search.set("scope", params.scope);
+  if (params.schedule_view) search.set("schedule_view", "true");
   const qs = search.toString();
   return apiFetch<TimetablePageData>(`/api/timetables${qs ? `?${qs}` : ""}`, { method: "GET" });
 }

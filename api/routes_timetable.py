@@ -312,10 +312,12 @@ async def timetable_list(
     semester_id: int | None = Query(default=None),
     section: str | None = Query(default=None),
     academic_year: str | None = Query(default=None),
+    scope: str | None = Query(default=None),
+    schedule_view: bool = Query(default=False),
     user: CurrentUser = Depends(get_current_user),
 ):
     with connect() as c:
-        if user.role in ("HOD", "ADMIN"):
+        if user.role in ("HOD", "ADMIN") and not schedule_view:
             semesters = c.execute(
                 "SELECT id, code, name, sort_order, active FROM academic_semesters ORDER BY sort_order"
             ).fetchall()
@@ -363,24 +365,52 @@ async def timetable_list(
 
         where = ["t.department='CSD'", "t.status='PUBLISHED'"]
         params = []
+        if user.role == "HOD":
+            where.append("LOWER(t.hod_username)=LOWER(%s)")
+            params.append(user.username)
         if semester_id is not None:
             where.append("t.semester_id=%s"); params.append(semester_id)
         if section:
             where.append("LOWER(t.section_name)=LOWER(%s)"); params.append(section)
         if academic_year:
             where.append("t.academic_year=%s"); params.append(academic_year)
+        # Faculty receives only their own assigned sessions from the server.
+        # HOD's explicit My Classes scope is similarly constrained to their identity.
+        # Use EXISTS instead of joining timetable_entries here. A LEFT JOIN creates
+        # one row per timetable entry, which previously forced DISTINCT and triggered
+        # MySQL error 3065 when ORDER BY referenced s.sort_order. EXISTS preserves the
+        # filtering semantics without creating duplicate timetable rows.
+        if user.role == "FACULTY":
+            where.append(
+                "EXISTS (SELECT 1 FROM timetable_entries e "
+                "WHERE e.timetable_id=t.id "
+                "AND LOWER(COALESCE(e.faculty_username,''))=LOWER(%s))"
+            )
+            params.append(user.username)
+        elif user.role == "HOD" and scope == "mine":
+            where.append(
+                "EXISTS (SELECT 1 FROM timetable_entries e "
+                "WHERE e.timetable_id=t.id "
+                "AND LOWER(COALESCE(e.faculty_username,''))=LOWER(%s))"
+            )
+            params.append(user.username)
         rows = c.execute(
             f"""SELECT t.*, s.code AS semester_code, s.name AS semester_name
                 FROM timetables t JOIN academic_semesters s ON s.id=t.semester_id
-                WHERE {' AND '.join(where)} ORDER BY t.academic_year DESC, s.sort_order, t.section_name""",
+                WHERE {' AND '.join(where)}
+                ORDER BY t.academic_year DESC, s.sort_order, t.section_name""",
             tuple(params),
         ).fetchall()
         semesters = c.execute("SELECT id, code, name, sort_order, active FROM academic_semesters WHERE active=1 ORDER BY sort_order").fetchall()
+        serialized = [_serialize_timetable(c, r) for r in rows]
+        if user.role == "FACULTY" or (user.role == "HOD" and scope == "mine"):
+            serialized = [dict(t, entries=[e for e in t["entries"] if str(e.get("faculty_username") or "").casefold() == user.username.casefold()]) for t in serialized]
+            serialized = [t for t in serialized if t["entries"]]
         return ok({
             "mode": "viewer",
             "periods_default": DEFAULT_PERIODS,
             "semesters": [dict(x) for x in semesters],
-            "timetables": [_serialize_timetable(c, r) for r in rows],
+            "timetables": serialized,
         })
 
 

@@ -3,3 +3,4 @@ dist/
 *.local
 
 backup/
+vite.config.ts.timestamp-*
